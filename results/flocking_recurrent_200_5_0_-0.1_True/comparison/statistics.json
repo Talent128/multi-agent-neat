@@ -1,0 +1,61 @@
+{
+  "task": "flocking",
+  "results": [
+    {
+      "Algorithm": "NEAT",
+      "Final Mean": "-10.8050",
+      "Final Std": "2.2014",
+      "Best Mean Ever": "-10.5232",
+      "Total Steps": 3000000
+    },
+    {
+      "Algorithm": "IDDPG",
+      "Final Mean": "-12.2424",
+      "Final Std": "4.0905",
+      "Best Mean Ever": "-9.0478",
+      "Total Steps": 3000000
+    },
+    {
+      "Algorithm": "IPPO",
+      "Final Mean": "-13.4448",
+      "Final Std": "4.9768",
+      "Best Mean Ever": "-13.4448",
+      "Total Steps": 3000000
+    },
+    {
+      "Algorithm": "MADDPG",
+      "Final Mean": "-28.9042",
+      "Final Std": "2.3252",
+      "Best Mean Ever": "-24.6566",
+      "Total Steps": 3000000
+    },
+    {
+      "Algorithm": "MAPPO",
+      "Final Mean": "-11.7555",
+      "Final Std": "4.8662",
+      "Best Mean Ever": "-11.7555",
+      "Total Steps": 3000000
+    },
+    {
+      "Algorithm": "QMIX",
+      "Final Mean": "-11.8436",
+      "Final Std": "4.4388",
+      "Best Mean Ever": "-10.8370",
+      "Total Steps": 3000000
+    },
+    {
+      "Algorithm": "VDN",
+      "Final Mean": "-12.1648",
+      "Final Std": "4.3057",
+      "Best Mean Ever": "-10.8469",
+      "Total Steps": 3000000
+    },
+    {
+      "Algorithm": "Heuristic",
+      "Final Mean": "-12.2585",
+      "Final Std": "N/A",
+      "Best Mean Ever": "-12.2585",
+      "Total Steps": "N/A"
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+defaults:
+  - experiment: base_experiment  # 纯 NEAT 训练的通用实验参数；在 two_stage 下，stage1 未显式设置的字段也会从这里继承
+  - algorithm: recurrent    # 当前两条链路都使用 recurrent NEAT
+  - task: ???               # VMAS 任务配置，形如 `vmas/navigation`、`vmas/transport`
+  - _self_
+
+seed: 0  # 全局随机种子；纯 NEAT 和两阶段都会使用

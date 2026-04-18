@@ -1,0 +1,22 @@
+{
+  "config": "flocking_recurrent_200_5_0_-0.1_False",
+  "total_generations": 50,
+  "initial": {
+    "fitness_avg": -384.48440439860025,
+    "fitness_std": 160.90197805101798,
+    "fitness_best": -66.91547393798828
+  },
+  "final": {
+    "fitness_avg": -61.801644503275554,
+    "fitness_std": 82.9933827765589,
+    "fitness_best": -24.340293884277344
+  },
+  "best_ever": {
+    "fitness": -23.9541072845459,
+    "generation": 34
+  },
+  "improvement": {
+    "avg_improvement": 322.6827598953247,
+    "best_improvement": 42.57518005371094
+  }
+}

@@ -1,0 +1,20 @@
+Performance Comparison: flocking
+==========================================================================================
+
+ Algorithm   |  Final Mean  |  Final Std   | Best Mean Ever | Total Steps 
+--------------------------------------------------------------------------
+    NEAT     |   -24.3403   |    3.2389    |    -23.9541    |   3000000   
+   IDDPG     |   -33.0685   |    3.1416    |    -33.0685    |   3000000   
+    IPPO     |   -31.5578   |    3.2807    |    -31.5578    |   3000000   
+   MADDPG    |   -32.6560   |    2.9592    |    -31.8259    |   3000000   
+   MAPPO     |   -41.2994   |    5.3041    |    -40.7297    |   3000000   
+    QMIX     |   -27.9989   |    3.7079    |    -27.6954    |   3000000   
+    VDN      |   -32.9208   |    3.4418    |    -30.5546    |   3000000   
+ Heuristic   |   -87.0842   |     N/A      |    -87.0842    |     N/A     
+
+
+Notes:
+- Final Mean: Mean return/fitness at the end of training
+- Final Std: Standard deviation at the end of training
+- Best Mean Ever: Best mean performance achieved during training
+- Total Steps: Total environment interaction steps

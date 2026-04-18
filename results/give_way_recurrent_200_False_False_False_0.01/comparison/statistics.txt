@@ -1,0 +1,19 @@
+Performance Comparison: give_way
+==========================================================================================
+
+ Algorithm   |  Final Mean  |  Final Std   | Best Mean Ever | Total Steps 
+--------------------------------------------------------------------------
+    NEAT     |    6.7611    |    0.0371    |     6.7749     |   3000000   
+   MAPPO     |    4.2647    |    0.0703    |     4.2647     |   3000000   
+    IPPO     |    4.2917    |    0.1751    |     4.2917     |   3000000   
+   MADDPG    |    4.0231    |    0.5820    |     5.6975     |   3000000   
+   IDDPG     |    4.0321    |    0.1147    |     4.2751     |   3000000   
+    QMIX     |    3.7618    |    0.1979    |     4.4179     |   3000000   
+    VDN      |    3.9357    |    0.4066    |     5.1962     |   3000000   
+
+
+Notes:
+- Final Mean: Mean return/fitness at the end of training
+- Final Std: Standard deviation at the end of training
+- Best Mean Ever: Best mean performance achieved during training
+- Total Steps: Total environment interaction steps

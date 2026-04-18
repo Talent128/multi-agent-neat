@@ -1,0 +1,15 @@
+{
+  "scenario": "transport",
+  "total_reward": 74.95977719807706,
+  "mean_reward_per_step": 0.18739944299519265,
+  "n_steps": 400,
+  "n_envs": 200,
+  "env_kwargs": {
+    "n_agents": 5,
+    "n_packages": 1,
+    "package_width": 0.15,
+    "package_length": 0.15,
+    "package_mass": 15
+  },
+  "eval_time": 11.562668800354004
+}

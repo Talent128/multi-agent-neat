@@ -1,0 +1,13 @@
+algorithm_config: {'delay_value': True, 'loss_function': 'l2'}
+algorithm_name: vdn
+continuous_actions: False
+critic_model_config: {'num_cells': [256, 256], 'layer_class': <class 'torch.nn.modules.linear.Linear'>, 'activation_class': <class 'torch.nn.modules.activation.Tanh'>, 'activation_kwargs': None, 'norm_class': None, 'norm_kwargs': None, 'num_feature_dims': 1, '_is_critic': True}
+critic_model_name: mlp
+environment_name: vmas
+experiment_config: {'sampling_device': 'cuda:3', 'train_device': 'cuda:3', 'buffer_device': 'cuda:3', 'share_policy_params': True, 'prefer_continuous_actions': True, 'collect_with_grad': False, 'parallel_collection': False, 'gamma': 0.9, 'lr': 5e-05, 'adam_eps': 1e-06, 'adam_extra_kwargs': {}, 'clip_grad_norm': True, 'clip_grad_val': 5, 'soft_target_update': True, 'polyak_tau': 0.005, 'hard_target_update_frequency': 5, 'exploration_eps_init': 0.8, 'exploration_eps_end': 0.01, 'exploration_anneal_frames': 1000000, 'max_n_iters': None, 'max_n_frames': 30000000, 'on_policy_collected_frames_per_batch': 60000, 'on_policy_n_envs_per_worker': 300, 'on_policy_n_minibatch_iters': 45, 'on_policy_minibatch_size': 4096, 'off_policy_collected_frames_per_batch': 6000, 'off_policy_n_envs_per_worker': 30, 'off_policy_n_optimizer_steps': 1000, 'off_policy_train_batch_size': 128, 'off_policy_memory_size': 1000000, 'off_policy_init_random_frames': 0, 'off_policy_use_prioritized_replay_buffer': False, 'off_policy_prb_alpha': 0.6, 'off_policy_prb_beta': 0.4, 'evaluation': True, 'render': True, 'evaluation_interval': 120000, 'evaluation_episodes': 200, 'evaluation_deterministic_actions': True, 'evaluation_static': False, 'loggers': ['csv'], 'project_name': 'benchmarl', 'wandb_extra_kwargs': {}, 'create_json': True, 'save_folder': '/home/zjc/PyTorch-NEAT/benchmark_results/transport_vdn_400_5_1_0.15_0.15_15_seed0', 'restore_file': None, 'restore_map_location': None, 'checkpoint_interval': 0, 'checkpoint_at_end': True, 'keep_checkpoints_num': 3, 'exclude_buffer_from_checkpoint': False}
+model_config: {'num_cells': [256, 256], 'layer_class': <class 'torch.nn.modules.linear.Linear'>, 'activation_class': <class 'torch.nn.modules.activation.Tanh'>, 'activation_kwargs': None, 'norm_class': None, 'norm_kwargs': None, 'num_feature_dims': 1, '_is_critic': False}
+model_name: mlp
+on_policy: False
+seed: 0
+task_config: {'max_steps': 400, 'n_agents': 5, 'n_packages': 1, 'package_width': 0.15, 'package_length': 0.15, 'package_mass': 15}
+task_name: transport

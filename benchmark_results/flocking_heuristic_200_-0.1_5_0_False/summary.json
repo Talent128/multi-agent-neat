@@ -1,0 +1,14 @@
+{
+  "scenario": "flocking",
+  "total_reward": -87.08420819044113,
+  "mean_reward_per_step": -0.4354210409522057,
+  "n_steps": 200,
+  "n_envs": 200,
+  "env_kwargs": {
+    "n_agents": 5,
+    "n_obstacles": 0,
+    "collision_reward": -0.1,
+    "static_at_origin": false
+  },
+  "eval_time": 6.261416673660278
+}

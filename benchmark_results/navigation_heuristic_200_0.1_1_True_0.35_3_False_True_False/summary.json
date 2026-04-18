@@ -1,0 +1,18 @@
+{
+  "scenario": "navigation",
+  "total_reward": -8.66671382705681,
+  "mean_reward_per_step": -0.04333356913528405,
+  "n_steps": 200,
+  "n_envs": 200,
+  "env_kwargs": {
+    "n_agents": 3,
+    "collisions": true,
+    "agents_with_same_goal": 1,
+    "split_goals": false,
+    "shared_rew": true,
+    "observe_all_goals": false,
+    "lidar_range": 0.35,
+    "agent_radius": 0.1
+  },
+  "eval_time": 133.31807661056519
+}

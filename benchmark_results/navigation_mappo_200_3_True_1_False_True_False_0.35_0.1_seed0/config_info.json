@@ -1,0 +1,49 @@
+{
+  "task_name": "navigation",
+  "algorithm_name": "mappo",
+  "seed": 0,
+  "neat_task_config": {
+    "max_steps": 200,
+    "n_agents": 3,
+    "collisions": true,
+    "agents_with_same_goal": 1,
+    "split_goals": false,
+    "shared_rew": true,
+    "observe_all_goals": false,
+    "lidar_range": 0.35,
+    "agent_radius": 0.1
+  },
+  "neat_exp_config": {
+    "generations": 50,
+    "trials": 200,
+    "n_parallel": 300,
+    "device": "cuda:2",
+    "continuous_actions": true,
+    "overwrite": false,
+    "render": false,
+    "save_render": false,
+    "train_render": false,
+    "show_gen": -1,
+    "collect_results": true,
+    "checkpt_freq": 1,
+    "results_dir": null
+  },
+  "aligned_params": {
+    "max_n_frames": 3000000,
+    "max_n_iters": null,
+    "evaluation": true,
+    "render": true,
+    "evaluation_interval": 60000,
+    "evaluation_episodes": 200,
+    "evaluation_deterministic_actions": true,
+    "evaluation_static": false,
+    "loggers": [
+      "csv"
+    ],
+    "create_json": true,
+    "checkpoint_interval": 0,
+    "checkpoint_at_end": true,
+    "keep_checkpoints_num": 3
+  },
+  "note": "\u5176\u4ed6\u53c2\u6570\u4f7f\u7528BenchMARL\u9ed8\u8ba4\u914d\u7f6e(conf/experiment/base_experiment.yaml)"
+}

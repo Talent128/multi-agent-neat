@@ -1,0 +1,22 @@
+{
+  "config": "transport_recurrent_400_5_1_0.15_0.15_15.0",
+  "total_generations": 250,
+  "initial": {
+    "fitness_avg": -0.13473402473774818,
+    "fitness_std": 0.3020223706555279,
+    "fitness_best": 0.6695584654808044
+  },
+  "final": {
+    "fitness_avg": 24.559780061294635,
+    "fitness_std": 36.975257638393636,
+    "fitness_best": 83.34113311767578
+  },
+  "best_ever": {
+    "fitness": 85.63187408447266,
+    "generation": 178
+  },
+  "improvement": {
+    "avg_improvement": 24.694514086032385,
+    "best_improvement": 82.67157465219498
+  }
+}

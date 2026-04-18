@@ -1,0 +1,44 @@
+[
+  {
+    "task": "transport",
+    "algorithm": "mappo",
+    "seed": 0,
+    "status": "success",
+    "result_dir": "/home/zjc/PyTorch-NEAT/benchmark_results/transport_mappo_400_5_1_0.15_0.15_15_seed0"
+  },
+  {
+    "task": "transport",
+    "algorithm": "ippo",
+    "seed": 0,
+    "status": "success",
+    "result_dir": "/home/zjc/PyTorch-NEAT/benchmark_results/transport_ippo_400_5_1_0.15_0.15_15_seed0"
+  },
+  {
+    "task": "transport",
+    "algorithm": "maddpg",
+    "seed": 0,
+    "status": "success",
+    "result_dir": "/home/zjc/PyTorch-NEAT/benchmark_results/transport_maddpg_400_5_1_0.15_0.15_15_seed0"
+  },
+  {
+    "task": "transport",
+    "algorithm": "iddpg",
+    "seed": 0,
+    "status": "success",
+    "result_dir": "/home/zjc/PyTorch-NEAT/benchmark_results/transport_iddpg_400_5_1_0.15_0.15_15_seed0"
+  },
+  {
+    "task": "transport",
+    "algorithm": "qmix",
+    "seed": 0,
+    "status": "success",
+    "result_dir": "/home/zjc/PyTorch-NEAT/benchmark_results/transport_qmix_400_5_1_0.15_0.15_15_seed0"
+  },
+  {
+    "task": "transport",
+    "algorithm": "vdn",
+    "seed": 0,
+    "status": "success",
+    "result_dir": "/home/zjc/PyTorch-NEAT/benchmark_results/transport_vdn_400_5_1_0.15_0.15_15_seed0"
+  }
+]

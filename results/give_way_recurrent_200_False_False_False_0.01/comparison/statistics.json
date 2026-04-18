@@ -1,0 +1,54 @@
+{
+  "task": "give_way",
+  "results": [
+    {
+      "Algorithm": "NEAT",
+      "Final Mean": "6.7611",
+      "Final Std": "0.0371",
+      "Best Mean Ever": "6.7749",
+      "Total Steps": 3000000
+    },
+    {
+      "Algorithm": "MAPPO",
+      "Final Mean": "4.2647",
+      "Final Std": "0.0703",
+      "Best Mean Ever": "4.2647",
+      "Total Steps": 3000000
+    },
+    {
+      "Algorithm": "IPPO",
+      "Final Mean": "4.2917",
+      "Final Std": "0.1751",
+      "Best Mean Ever": "4.2917",
+      "Total Steps": 3000000
+    },
+    {
+      "Algorithm": "MADDPG",
+      "Final Mean": "4.0231",
+      "Final Std": "0.5820",
+      "Best Mean Ever": "5.6975",
+      "Total Steps": 3000000
+    },
+    {
+      "Algorithm": "IDDPG",
+      "Final Mean": "4.0321",
+      "Final Std": "0.1147",
+      "Best Mean Ever": "4.2751",
+      "Total Steps": 3000000
+    },
+    {
+      "Algorithm": "QMIX",
+      "Final Mean": "3.7618",
+      "Final Std": "0.1979",
+      "Best Mean Ever": "4.4179",
+      "Total Steps": 3000000
+    },
+    {
+      "Algorithm": "VDN",
+      "Final Mean": "3.9357",
+      "Final Std": "0.4066",
+      "Best Mean Ever": "5.1962",
+      "Total Steps": 3000000
+    }
+  ]
+}

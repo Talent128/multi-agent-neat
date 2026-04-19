@@ -1,0 +1,258 @@
+{
+  "config": "transport_recurrent_410_5_1_0.15_0.15_15.0",
+  "task_dir": "/home/zjc/multi-agent-neat/results/transport_recurrent_410_5_1_0.15_0.15_15.0",
+  "total_generations": 250,
+  "global_best_generation": 226,
+  "population": {
+    "fitness_avg": {
+      "label": "fitness_avg",
+      "initial": {
+        "generation": 0,
+        "value": -0.11321733989117698
+      },
+      "final": {
+        "generation": 249,
+        "value": 14.329985756096882
+      },
+      "min": {
+        "generation": 0,
+        "value": -0.11321733989117698
+      },
+      "max": {
+        "generation": 247,
+        "value": 16.77608389188115
+      }
+    },
+    "fitness_std": {
+      "label": "fitness_std",
+      "initial": {
+        "generation": 0,
+        "value": 0.26417077718919646
+      },
+      "final": {
+        "generation": 249,
+        "value": 27.35401282983119
+      },
+      "min": {
+        "generation": 0,
+        "value": 0.26417077718919646
+      },
+      "max": {
+        "generation": 249,
+        "value": 27.35401282983119
+      }
+    },
+    "fitness_best": {
+      "label": "fitness_best",
+      "initial": {
+        "generation": 0,
+        "value": 1.059606671333313
+      },
+      "final": {
+        "generation": 249,
+        "value": 78.48870849609375
+      },
+      "min": {
+        "generation": 1,
+        "value": 0.9309161305427551
+      },
+      "max": {
+        "generation": 226,
+        "value": 81.29393768310547
+      }
+    },
+    "avg_improvement": 14.443203095988059,
+    "best_improvement": 77.42910182476044
+  },
+  "evaluation": {
+    "best_mean": {
+      "label": "best_mean",
+      "initial": {
+        "generation": 0,
+        "value": 1.059606671333313
+      },
+      "final": {
+        "generation": 249,
+        "value": 78.48870849609375
+      },
+      "min": {
+        "generation": 1,
+        "value": 0.9309161305427551
+      },
+      "max": {
+        "generation": 226,
+        "value": 81.29393768310547
+      }
+    },
+    "best_std": {
+      "label": "best_std",
+      "initial": {
+        "generation": 0,
+        "value": 6.165457248687744
+      },
+      "final": {
+        "generation": 249,
+        "value": 38.640628814697266
+      },
+      "min": {
+        "generation": 2,
+        "value": 3.844834566116333
+      },
+      "max": {
+        "generation": 220,
+        "value": 43.43834686279297
+      }
+    },
+    "best_min": {
+      "label": "best_min",
+      "initial": {
+        "generation": 0,
+        "value": -24.149673461914062
+      },
+      "final": {
+        "generation": 249,
+        "value": -3.509387969970703
+      },
+      "min": {
+        "generation": 103,
+        "value": -83.75410461425781
+      },
+      "max": {
+        "generation": 238,
+        "value": 4.786863327026367
+      }
+    },
+    "best_max": {
+      "label": "best_max",
+      "initial": {
+        "generation": 0,
+        "value": 40.36864471435547
+      },
+      "final": {
+        "generation": 249,
+        "value": 142.96974182128906
+      },
+      "min": {
+        "generation": 1,
+        "value": 16.226261138916016
+      },
+      "max": {
+        "generation": 228,
+        "value": 160.30056762695312
+      }
+    }
+  },
+  "complexity": {
+    "n_neurons_best": {
+      "label": "n_neurons_best",
+      "initial": {
+        "generation": 0,
+        "value": 2.0
+      },
+      "final": {
+        "generation": 249,
+        "value": 3.0
+      },
+      "min": {
+        "generation": 0,
+        "value": 2.0
+      },
+      "max": {
+        "generation": 67,
+        "value": 10.0
+      }
+    },
+    "n_conns_best": {
+      "label": "n_conns_best",
+      "initial": {
+        "generation": 0,
+        "value": 24.0
+      },
+      "final": {
+        "generation": 249,
+        "value": 10.0
+      },
+      "min": {
+        "generation": 205,
+        "value": 7.0
+      },
+      "max": {
+        "generation": 67,
+        "value": 35.0
+      }
+    }
+  },
+  "species": {
+    "logged_n_species": {
+      "label": "n_species",
+      "initial": {
+        "generation": 0,
+        "value": 1.0
+      },
+      "final": {
+        "generation": 249,
+        "value": 4.0
+      },
+      "min": {
+        "generation": 0,
+        "value": 1.0
+      },
+      "max": {
+        "generation": 221,
+        "value": 5.0
+      }
+    },
+    "tracked_species_ids": [
+      1,
+      2,
+      3,
+      4,
+      5
+    ],
+    "n_species_final": 4,
+    "n_species_peak": 5,
+    "final_sizes": {
+      "1": 64,
+      "3": 68,
+      "4": 101,
+      "5": 66
+    },
+    "largest_species": {
+      "species_id": 1,
+      "generation": 0,
+      "size": 300
+    }
+  },
+  "runtime": {
+    "time_elapsed": {
+      "label": "time_elapsed",
+      "initial": {
+        "generation": 0,
+        "value": 3.6165709495544434
+      },
+      "final": {
+        "generation": 249,
+        "value": 4.441657304763794
+      },
+      "min": {
+        "generation": 0,
+        "value": 3.6165709495544434
+      },
+      "max": {
+        "generation": 207,
+        "value": 8.512621879577637
+      }
+    },
+    "total_recorded_seconds": 1294.0693349838257
+  },
+  "outputs": {
+    "plots": [
+      "analysis_dashboard.png",
+      "complexity_panel.png",
+      "evaluation_spread.png",
+      "population_evolution.png",
+      "species_distribution.png"
+    ],
+    "summary_json": "analysis_summary.json"
+  }
+}

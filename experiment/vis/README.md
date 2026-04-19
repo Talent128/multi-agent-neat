@@ -148,6 +148,7 @@ python experiment/vis/analyze_results.py transport_recurrent_410_5_1_0.15_0.15_1
 输出：
 
 - `results/<result_dir>/result_analysis/analysis_dashboard.png`
+- `results/<result_dir>/result_analysis/analysis_summary.json`
 
 内容包括：
 
@@ -172,6 +173,7 @@ python experiment/vis/analyze_results.py \
 - `results/<result_dir>/result_analysis/evaluation_spread.png`
 - `results/<result_dir>/result_analysis/complexity_panel.png`
 - `results/<result_dir>/result_analysis/species_distribution.png`
+- `results/<result_dir>/result_analysis/analysis_summary.json`
 
 只导出某一张：
 
@@ -203,6 +205,15 @@ python experiment/vis/analyze_results.py <result_dir> --species-panel
 - `time_elapsed`
 - `n_neurons_best`
 - `n_conns_best`
+
+`analysis_summary.json` 会额外记录这些图对应的关键摘要值，包括：
+
+- 总代数与全局最优代数
+- 种群适应度初值、末值、最值与提升量
+- `best_mean/std/min/max` 的摘要
+- 最优个体复杂度摘要
+- 物种数量与最终物种规模分布
+- 已生成的分析图文件列表
 
 ## 3. Python API 用法
 
@@ -278,6 +289,7 @@ python experiment/vis/visualize_genome.py <result_dir> --evolution --interval 20
 - 默认全局最优依赖 `global_best_genome.pkl`
 - 如果 checkpoint 太多，`--evolution` 会自动下采样
 - 如果想集中保存单次训练分析图，可使用 `--output-dir`
+- `analysis_summary.json` 是基于当前结果目录重新汇总出来的摘要，不会替代原始 `log.json` / `best_log.json`
 
 ## 7. 快速检查
 

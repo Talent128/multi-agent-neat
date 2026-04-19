@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -61,6 +62,180 @@ def _resolve_best_generation(task_dir: str):
         return int(best_generation)
     except FileNotFoundError:
         return None
+
+
+def _to_optional_float(value):
+    value = float(value)
+    if not np.isfinite(value):
+        return None
+    return value
+
+
+def _to_optional_int(value):
+    if value is None:
+        return None
+    value = int(value)
+    return value
+
+
+def _series_summary(generations, values, *, label: str):
+    generations = np.asarray(generations, dtype=int)
+    values = np.asarray(values, dtype=float)
+    finite_mask = np.isfinite(values)
+    if generations.size == 0 or not finite_mask.any():
+        return {
+            "label": label,
+            "initial": None,
+            "final": None,
+            "min": None,
+            "max": None,
+        }
+
+    finite_generations = generations[finite_mask]
+    finite_values = values[finite_mask]
+    min_idx = int(np.argmin(finite_values))
+    max_idx = int(np.argmax(finite_values))
+    return {
+        "label": label,
+        "initial": {
+            "generation": int(finite_generations[0]),
+            "value": _to_optional_float(finite_values[0]),
+        },
+        "final": {
+            "generation": int(finite_generations[-1]),
+            "value": _to_optional_float(finite_values[-1]),
+        },
+        "min": {
+            "generation": int(finite_generations[min_idx]),
+            "value": _to_optional_float(finite_values[min_idx]),
+        },
+        "max": {
+            "generation": int(finite_generations[max_idx]),
+            "value": _to_optional_float(finite_values[max_idx]),
+        },
+    }
+
+
+def _collect_output_files(output_dir: str):
+    if not os.path.isdir(output_dir):
+        return []
+    return sorted(
+        filename
+        for filename in os.listdir(output_dir)
+        if filename.endswith(".png")
+    )
+
+
+def _build_analysis_summary(
+    task_dir: str,
+    history: list[dict],
+    output_dir: str,
+    *,
+    best_generation: int | None,
+):
+    generations = np.asarray([int(record["generation"]) for record in history], dtype=int)
+    total_generations = int(generations[-1]) + 1 if generations.size else 0
+
+    fitness_avg = np.asarray([record.get("fitness_avg", np.nan) for record in history], dtype=float)
+    fitness_std = np.asarray([record.get("fitness_std", np.nan) for record in history], dtype=float)
+    fitness_best = np.asarray([record.get("fitness_best", np.nan) for record in history], dtype=float)
+
+    best_mean = np.asarray([record.get("best_mean", np.nan) for record in history], dtype=float)
+    best_std = np.asarray([record.get("best_std", np.nan) for record in history], dtype=float)
+    best_min = np.asarray([record.get("best_min", np.nan) for record in history], dtype=float)
+    best_max = np.asarray([record.get("best_max", np.nan) for record in history], dtype=float)
+
+    n_neurons = np.asarray([record.get("n_neurons_best", np.nan) for record in history], dtype=float)
+    n_conns = np.asarray([record.get("n_conns_best", np.nan) for record in history], dtype=float)
+    time_elapsed = np.asarray([record.get("time_elapsed", np.nan) for record in history], dtype=float)
+    n_species_from_logs = np.asarray([record.get("n_species", np.nan) for record in history], dtype=float)
+
+    species_generations, species_curves, species_ids = load_species_history(task_dir)
+    final_species_sizes = {}
+    largest_species = None
+    if species_curves.size > 0:
+        final_idx = species_curves.shape[1] - 1
+        final_species_sizes = {
+            str(species_id): int(species_curves[idx, final_idx])
+            for idx, species_id in enumerate(species_ids)
+            if species_curves[idx, final_idx] > 0
+        }
+        max_flat_idx = int(np.argmax(species_curves))
+        species_idx, generation_idx = np.unravel_index(max_flat_idx, species_curves.shape)
+        largest_species = {
+            "species_id": int(species_ids[species_idx]),
+            "generation": int(species_generations[generation_idx]),
+            "size": int(species_curves[species_idx, generation_idx]),
+        }
+
+    summary = {
+        "config": os.path.basename(task_dir),
+        "task_dir": task_dir,
+        "total_generations": total_generations,
+        "global_best_generation": _to_optional_int(best_generation),
+        "population": {
+            "fitness_avg": _series_summary(generations, fitness_avg, label="fitness_avg"),
+            "fitness_std": _series_summary(generations, fitness_std, label="fitness_std"),
+            "fitness_best": _series_summary(generations, fitness_best, label="fitness_best"),
+            "avg_improvement": (
+                _to_optional_float(fitness_avg[-1] - fitness_avg[0])
+                if generations.size and np.isfinite(fitness_avg[[0, -1]]).all()
+                else None
+            ),
+            "best_improvement": (
+                _to_optional_float(fitness_best[-1] - fitness_best[0])
+                if generations.size and np.isfinite(fitness_best[[0, -1]]).all()
+                else None
+            ),
+        },
+        "evaluation": {
+            "best_mean": _series_summary(generations, best_mean, label="best_mean"),
+            "best_std": _series_summary(generations, best_std, label="best_std"),
+            "best_min": _series_summary(generations, best_min, label="best_min"),
+            "best_max": _series_summary(generations, best_max, label="best_max"),
+        },
+        "complexity": {
+            "n_neurons_best": _series_summary(generations, n_neurons, label="n_neurons_best"),
+            "n_conns_best": _series_summary(generations, n_conns, label="n_conns_best"),
+        },
+        "species": {
+            "logged_n_species": _series_summary(generations, n_species_from_logs, label="n_species"),
+            "tracked_species_ids": [int(species_id) for species_id in species_ids],
+            "n_species_final": len(final_species_sizes),
+            "n_species_peak": int(species_curves.shape[0]) if species_curves.size else 0,
+            "final_sizes": final_species_sizes,
+            "largest_species": largest_species,
+        },
+        "runtime": {
+            "time_elapsed": _series_summary(generations, time_elapsed, label="time_elapsed"),
+            "total_recorded_seconds": _to_optional_float(np.nansum(time_elapsed)) if time_elapsed.size else None,
+        },
+        "outputs": {
+            "plots": _collect_output_files(output_dir),
+            "summary_json": "analysis_summary.json",
+        },
+    }
+    return summary
+
+
+def _write_analysis_summary(
+    task_dir: str,
+    output_dir: str,
+    history: list[dict],
+    *,
+    best_generation: int | None,
+):
+    summary = _build_analysis_summary(
+        task_dir,
+        history,
+        output_dir,
+        best_generation=best_generation,
+    )
+    output_file = os.path.join(output_dir, "analysis_summary.json")
+    with open(output_file, "w") as f:
+        json.dump(summary, f, indent=2)
+    print(f"saved: {output_file}")
+    return output_file
 
 
 def _style_generation_axis(ax, generations):
@@ -193,13 +368,15 @@ def plot_population_evolution_panel(task_dir: str, output_dir: str | None = None
     history = load_run_history(task_dir)
     if not history:
         raise FileNotFoundError(f"No logs found in {task_dir}")
+    best_generation = _resolve_best_generation(task_dir)
 
     fig, ax = plt.subplots(figsize=(7.4, 4.8))
-    _draw_population_axis(ax, build_population_data(history), best_generation=_resolve_best_generation(task_dir))
+    _draw_population_axis(ax, build_population_data(history), best_generation=best_generation)
 
     output_file = os.path.join(output_dir, "population_evolution.png")
     finalize_figure(fig, output_file)
     print(f"saved: {output_file}")
+    _write_analysis_summary(task_dir, output_dir, history, best_generation=best_generation)
     return output_file
 
 
@@ -208,13 +385,15 @@ def plot_evaluation_spread_panel(task_dir: str, output_dir: str | None = None):
     history = load_run_history(task_dir)
     if not history:
         raise FileNotFoundError(f"No logs found in {task_dir}")
+    best_generation = _resolve_best_generation(task_dir)
 
     fig, ax = plt.subplots(figsize=(7.4, 4.8))
-    _draw_spread_axis(ax, history, best_generation=_resolve_best_generation(task_dir))
+    _draw_spread_axis(ax, history, best_generation=best_generation)
 
     output_file = os.path.join(output_dir, "evaluation_spread.png")
     finalize_figure(fig, output_file)
     print(f"saved: {output_file}")
+    _write_analysis_summary(task_dir, output_dir, history, best_generation=best_generation)
     return output_file
 
 
@@ -223,26 +402,33 @@ def plot_complexity_panel(task_dir: str, output_dir: str | None = None):
     history = load_run_history(task_dir)
     if not history:
         raise FileNotFoundError(f"No logs found in {task_dir}")
+    best_generation = _resolve_best_generation(task_dir)
 
     fig, ax = plt.subplots(figsize=(7.4, 4.8))
-    _draw_complexity_axis(ax, history, best_generation=_resolve_best_generation(task_dir))
+    _draw_complexity_axis(ax, history, best_generation=best_generation)
 
     output_file = os.path.join(output_dir, "complexity_panel.png")
     finalize_figure(fig, output_file)
     print(f"saved: {output_file}")
+    _write_analysis_summary(task_dir, output_dir, history, best_generation=best_generation)
     return output_file
 
 
 def plot_species_distribution_panel(task_dir: str, output_dir: str | None = None):
     task_dir, output_dir = _single_run_output_dir(task_dir, output_dir)
+    history = load_run_history(task_dir)
+    if not history:
+        raise FileNotFoundError(f"No logs found in {task_dir}")
+    best_generation = _resolve_best_generation(task_dir)
 
     fig, ax = plt.subplots(figsize=(7.4, 4.8))
     generations, curves, _ = load_species_history(task_dir)
-    _draw_species_axis(ax, generations, curves, best_generation=_resolve_best_generation(task_dir))
+    _draw_species_axis(ax, generations, curves, best_generation=best_generation)
 
     output_file = os.path.join(output_dir, "species_distribution.png")
     finalize_figure(fig, output_file)
     print(f"saved: {output_file}")
+    _write_analysis_summary(task_dir, output_dir, history, best_generation=best_generation)
     return output_file
 
 
@@ -270,6 +456,7 @@ def plot_run_dashboard(task_dir: str, output_dir: str | None = None):
     fig.savefig(output_file, dpi=160, bbox_inches="tight", facecolor="white")
     plt.close(fig)
     print(f"saved: {output_file}")
+    _write_analysis_summary(task_dir, output_dir, history, best_generation=best_generation)
     return output_file
 
 

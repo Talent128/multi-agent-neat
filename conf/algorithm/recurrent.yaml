@@ -4,6 +4,5 @@ defaults:
 
 neat_config_path: conf/algorithm/neat_config/recurrent.cfg  # NEAT 拓扑/变异超参数模板路径
 n_internal_steps: 1  # 每个环境 step 内，隐藏状态先内部迭代多少次，再输出动作
-activation: sigmoid  # 网络激活函数；当前 FrozenActor/两阶段默认支持 sigmoid 和 tanh
 use_current_activs: False  # recurrent 更新时是否使用当前时刻激活值，False 时，输出层使用“更新前”的隐藏状态。True 时，输出层使用“刚更新完”的隐藏状态
 prune_empty: False  # 构图时是否裁掉空节点/空连接

@@ -72,8 +72,7 @@ def find_neat_results(
     
     # 如果提供了任务配置，尝试精确匹配
     if task_config is not None:
-        # 导入generate_results_dir_name函数
-        from experiment.utils import generate_results_dir_name
+        from experiment.runtime import generate_results_dir_name
         
         # 创建任务配置对象（可以是普通对象或dataclass）
         # 先尝试从environments.vmas模块导入TaskConfig
@@ -244,4 +243,3 @@ def get_config_name(results_dir: str) -> str:
     """
     dir_name = os.path.basename(results_dir)
     return dir_name
-

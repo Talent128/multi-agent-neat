@@ -15,7 +15,7 @@ overwrite: False            # 是否忽略已有 checkpoint 重新训练；False
 render: False               # 是否进入“只渲染不训练”模式；设为 True 后会直接展示已有 checkpoint 的策略结果
 save_render: False          # 是否把渲染保存成 mp4；开启时必须同时 render=True
 train_render: False         # 训练过程中是否实时渲染；通常关闭，否则训练会明显变慢
-show_gen: -1                # 渲染/展示哪一代 checkpoint；-1 表示最后一代
+show_gen: -1                # 渲染/展示哪一代 checkpoint；-1 表示整个训练过程的全局最优
 collect_results: True       # 是否把适应度曲线、最佳个体统计等写入 results/logs
 
 checkpt_freq: 1               # 每隔多少代保存一次 checkpoint

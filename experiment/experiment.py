@@ -8,24 +8,29 @@ from typing import Optional
 import os
 import time
 import multiprocessing
-import tempfile
-import gzip, random, pickle
 
 import neat
 import torch
-import numpy as np
 from vmas import make_env
 
 from pytorch_neat.recurrent_net import RecurrentNet
-from pytorch_neat.activations import str_to_activation
+from pytorch_neat.activations import normalize_output_groups
 
 from .evaluator import GenomeEvaluator
 from .batch_evaluator import BatchGenomeEvaluator
-from .neat_reporter import LogReporter
-from .utils import (
-    load_neat_config_with_substitution,
+from .neat_reporter import LogReporter, GlobalBestReporter
+from .runtime import (
+    build_evaluator_kwargs,
+    ensure_results_layout,
+    find_latest_checkpoint,
     generate_results_dir_name,
-    seed_everything,
+    get_action_bounds,
+    load_global_best_package,
+    load_global_best_target,
+    load_generation_target,
+    load_neat_config_with_substitution,
+    print_block,
+    restore_population_checkpoint,
 )
 from .better_pop import better_Population
 
@@ -81,53 +86,13 @@ class Experiment:
         self.seed = seed
 
         self.just_restored = False  # 记录是否刚从检查点恢复
-        
-        # 解析任务名称
+
         self.env_name, self.scenario_name = task_name.split("/")
         assert self.env_name == "vmas", f"仅支持vmas环境，当前: {self.env_name}"
-
-        # 获取n_agents参数（用于路径命名）
         self.n_agents = getattr(task_config, 'n_agents', 'default')
-
-        # 设置结果目录
-        if self.config.results_dir is None:
-            # 格式: results/task_name_algorithm_name_param1_param2_...
-            self.config.results_dir = generate_results_dir_name(
-                self.scenario_name, self.algorithm_name, self.task_config
-            )
-
-        # 创建结果目录及子文件夹
-        os.makedirs(self.config.results_dir, exist_ok=True)
-        self.checkpoint_dir = os.path.join(self.config.results_dir, "checkpoints")
-        self.log_dir = os.path.join(self.config.results_dir, "logs")
-        self.video_dir = os.path.join(self.config.results_dir, "videos")
-        os.makedirs(self.checkpoint_dir, exist_ok=True)
-        os.makedirs(self.log_dir, exist_ok=True)
-        os.makedirs(self.video_dir, exist_ok=True)
-
-        # 创建测试环境以获取观测和动作维度
-        test_env = self._make_env(num_envs=1)
-        obs = test_env.reset()
-        self.obs_dim = obs[0].shape[-1]
-        # 从action_space或者通过执行一步获取动作维度
-        if hasattr(test_env.agents[0], 'action_space') and hasattr(test_env.agents[0].action_space, 'shape'):
-            self.action_dim = test_env.agents[0].action_space.shape[0]
-        else:
-            # 对于连续动作，动作维度通常是2（2D运动）
-            # 可以通过agents[0].action的属性获取
-            # vmas中，u是力/速度控制，通常是2D
-            self.action_dim = 2  # 默认2D运动
-        
-        print(f"\n{'='*60}")
-        print(f"任务: {task_name}")
-        print(f"算法: {algorithm_name}")
-        print(f"观测维度: {self.obs_dim}")
-        print(f"动作维度: {self.action_dim}")
-        print(f"智能体数量: {self.n_agents}")
-        print(f"并行环境: {self.config.trials}")
-        print(f"并行基因组: {self.config.n_parallel}")
-        print(f"设备: {self.config.device}")
-        print(f"{'='*60}\n")
+        self._init_results_layout()
+        self._init_space_dimensions()
+        self._print_setup_summary()
 
         # 加载NEAT配置
         self.neat_config = self._load_neat_config()
@@ -135,27 +100,65 @@ class Experiment:
         # 初始化种群
         self.population = None
 
+    def _init_results_layout(self):
+        if self.config.results_dir is None:
+            self.config.results_dir = generate_results_dir_name(
+                self.scenario_name, self.algorithm_name, self.task_config
+            )
+
+        paths = ensure_results_layout(self.config.results_dir)
+        self.checkpoint_dir = paths.checkpoint_dir
+        self.log_dir = paths.log_dir
+        self.video_dir = paths.video_dir
+        self.global_best_package_path = paths.global_best_package_path
+
+    def _init_space_dimensions(self):
+        test_env = self._make_env(num_envs=1)
+        try:
+            obs = test_env.reset()
+            self.obs_dim = obs[0].shape[-1]
+
+            if hasattr(test_env.agents[0], 'action_space') and hasattr(test_env.agents[0].action_space, 'shape'):
+                self.action_dim = test_env.agents[0].action_space.shape[0]
+            else:
+                self.action_dim = 2
+        finally:
+            if hasattr(test_env, "close"):
+                test_env.close()
+
+    def _print_setup_summary(self):
+        print_block(
+            "Experiment",
+            [
+                ("task", self.task_name),
+                ("algo", self.algorithm_name),
+                ("obs_dim", self.obs_dim),
+                ("action_dim", self.action_dim),
+                ("agents", self.n_agents),
+                ("trials", self.config.trials),
+                ("n_parallel", self.config.n_parallel),
+                ("device", self.config.device),
+                ("results", self.config.results_dir),
+            ],
+        )
+
     def _load_neat_config(self):
         """加载NEAT配置，替换输入输出维度"""
         cfg_path = self.algorithm_config.neat_config_path
 
-        # 将配置文件保存到results目录
         neat_cfg_filename = os.path.basename(cfg_path)
         permanent_cfg_path = os.path.join(self.config.results_dir, neat_cfg_filename)
 
-        # 如果配置文件已存在，直接使用
         if os.path.exists(permanent_cfg_path):
-            print(f"使用已有的NEAT配置: {permanent_cfg_path}")
             temp_cfg_path = permanent_cfg_path
         else:
-            # 创建配置文件，替换占位符
             temp_cfg_path = load_neat_config_with_substitution(
                 cfg_path, self.obs_dim, self.action_dim, permanent_cfg_path
             )
-            print(f"NEAT配置已保存至: {permanent_cfg_path}")
 
-        # 加载NEAT配置
-        neat_config = neat.Config(
+        print(f"neat_cfg: {permanent_cfg_path}")
+
+        return neat.Config(
             neat.DefaultGenome,
             neat.DefaultReproduction,
             neat.DefaultSpeciesSet,
@@ -163,11 +166,41 @@ class Experiment:
             temp_cfg_path
         )
 
-        return neat_config
-
     def _get_generation_env_seed(self, generation: int) -> int:
         """返回某一代评估使用的环境 seed。"""
         return int(self.seed + generation)
+
+    def _n_steps(self) -> int:
+        return getattr(self.task_config, 'max_steps', 200)
+
+    def _build_evaluator_kwargs(
+        self,
+        *,
+        generation: int,
+        env_seed: int,
+        render: bool,
+        save_render: bool,
+    ):
+        return build_evaluator_kwargs(
+            make_net=self._make_net,
+            activate_net=self._activate_net,
+            make_env=self._make_env,
+            n_steps=self._n_steps(),
+            batch_size=self.config.trials,
+            render=render,
+            save_render=save_render,
+            video_dir=self.video_dir,
+            generation=generation,
+            env_seed=env_seed,
+            scenario_name=self.scenario_name,
+        )
+
+    @staticmethod
+    def _assign_eval_stats(genomes, results):
+        genomes_dict = dict(genomes)
+        for genome_id, stats in results:
+            genomes_dict[genome_id].fitness = stats.mean
+            genomes_dict[genome_id].eval_stats = stats
 
     def _make_env(self, num_envs=None, seed=None):
         """创建VMAS环境
@@ -218,15 +251,10 @@ class Experiment:
         device = self.config.device  # 使用实验配置中的device
 
         if self.algorithm_name == "recurrent":
-            # RecurrentNet
-            activation = str_to_activation.get(
-                getattr(self.algorithm_config, 'activation', 'sigmoid')
-            )
             return RecurrentNet.create(
                 genome,
                 config,
                 batch_size=batch_size,
-                activation=activation,
                 use_current_activs=getattr(self.algorithm_config, 'use_current_activs', False),
                 n_internal_steps=getattr(self.algorithm_config, 'n_internal_steps', 1),
                 prune_empty=getattr(self.algorithm_config, 'prune_empty', True),
@@ -253,72 +281,17 @@ class Experiment:
         with torch.no_grad():
             output = net.activate(obs)
 
-        #print(f"neat输出output: {output}")
-        
-        # 根据激活函数类型获取网络输出范围
-        activation_name = getattr(self.algorithm_config, 'activation', 'sigmoid')
-        
-        # 根据动力学模型类型处理输出
-        if dynamics_type == "DiffDrive":
-            # DiffDrive动力学：u_range = [最大线速度, 最大角速度]
-            # 输出维度0: 线速度，范围 [-max_linear_vel, max_linear_vel]
-            # 输出维度1: 角速度，范围 [-max_angular_vel, max_angular_vel]
-            if isinstance(u_range, (list, tuple)):
-                max_linear_vel = u_range[0]
-                max_angular_vel = u_range[1]
-            elif isinstance(u_range, torch.Tensor):
-                max_linear_vel = u_range[0].item() if u_range.numel() > 1 else u_range.item()
-                max_angular_vel = u_range[1].item() if u_range.numel() > 1 else u_range.item()
-            else:
-                # 如果只有一个值，两者使用相同范围
-                max_linear_vel = u_range
-                max_angular_vel = u_range
-            
-            if activation_name == 'tanh':
-                # tanh输出范围是[-1, 1]，直接缩放到动作范围
-                output = torch.clamp(output, -1.0, 1.0)
-                # 分别处理两个维度
-                action = torch.zeros_like(output)
-                action[:, 0] = output[:, 0] * max_linear_vel   # 线速度
-                action[:, 1] = output[:, 1] * max_angular_vel  # 角速度
-            else:
-                # sigmoid输出范围是[0, 1]，映射到[-max, max]
-                output = torch.clamp(output, 0.0, 1.0)
-                action = torch.zeros_like(output)
-                action[:, 0] = (output[:, 0] * 2.0 - 1.0) * max_linear_vel   # 线速度
-                action[:, 1] = (output[:, 1] * 2.0 - 1.0) * max_angular_vel  # 角速度
-        else:
-            # Holonomic及其他动力学模型：标准处理
-            # u_range可能是float（表示[-u_range, u_range]）或tensor/列表
-            if isinstance(u_range, (list, tuple)):
-                # 如果是列表，可能是每个维度不同的范围
-                u_range_tensor = torch.tensor(u_range, device=output.device, dtype=output.dtype)
-                u_min = -u_range_tensor
-                u_max = u_range_tensor
-            elif isinstance(u_range, torch.Tensor):
-                if u_range.numel() == 1:
-                    # 单个值，对称范围
-                    u_min = -u_range.item()
-                    u_max = u_range.item()
-                else:
-                    # 多个值，每个维度不同范围
-                    u_min = -u_range
-                    u_max = u_range
-            else:
-                # u_range是一个标量float，对称范围
-                u_min = -u_range
-                u_max = u_range
+        if not hasattr(net, "output_activation_groups"):
+            raise ValueError("Network is missing output_activation_groups; node activations are required.")
 
-            if activation_name == 'tanh':
-                # tanh输出范围是[-1, 1]，clamp后映射到[u_min, u_max]
-                output = torch.clamp(output, -1.0, 1.0)
-                action = (output + 1.0) / 2.0 * (u_max - u_min) + u_min
-            else:
-                # sigmoid激活函数输出范围是[0, 1]，clamp后映射到[u_min, u_max]
-                output = torch.clamp(output, 0.0, 1.0)
-                action = output * (u_max - u_min) + u_min
-
-        #print(f"neat处理后动作action: {action}")
+        normalized_output = normalize_output_groups(output, net.output_activation_groups)
+        u_min, u_max = get_action_bounds(
+            u_range,
+            device=output.device,
+            dtype=output.dtype,
+            dynamics_type=dynamics_type,
+        )
+        action = normalized_output * (u_max - u_min) + u_min
         return action
 
     def _eval_genome_worker(self, args):
@@ -356,8 +329,11 @@ class Experiment:
         
         if debug:
             stats = genome.eval_stats
-            print(f"最佳个体统计: mean={stats.mean:.4f}, std={stats.std:.4f}, "
-                  f"max={stats.max_val:.4f}, min={stats.min_val:.4f}")
+            print(
+                "best_stats: "
+                f"mean={stats.mean:.4f}, std={stats.std:.4f}, "
+                f"max={stats.max_val:.4f}, min={stats.min_val:.4f}"
+            )
         return genome.eval_stats
 
     def _eval_genomes(self, genomes, config):
@@ -369,20 +345,17 @@ class Experiment:
         """
         # 如果刚从检查点恢复，跳过这一代的评估（已有适应度）
         if self.just_restored:
-            print("从检查点恢复，跳过本代评估，不重复评估（使用已保存的适应度）")
+            print("resume: skip first evaluation, reuse checkpoint fitness")
             self.just_restored = False
             return
 
-        # 根据设备选择评估策略
         is_cuda = 'cuda' in self.config.device.lower()
         generation = getattr(self.population, "generation", 0)
         generation_env_seed = self._get_generation_env_seed(generation)
         
         if is_cuda and self.config.n_parallel > 1:
-            # GPU模式：使用批量评估器（由单进程完成多基因组并行评估，避免spawn开销）
             self._eval_genomes_batch(genomes, config, generation_env_seed)
         else:
-            # n_parallel > 1时使用多进程并行。n_parallel=1时单进程顺序评估。设备由 self.config.device 决定。
             self._eval_genomes_parallel(genomes, config, generation, generation_env_seed)
     
     def _eval_genomes_batch(self, genomes, config, generation_env_seed):
@@ -396,308 +369,219 @@ class Experiment:
         从而防止checkpoint保存时的pickle序列化问题。
         """
         n_parallel = self.config.n_parallel
-        
-        # 创建GPU批量评估器
+
         batch_evaluator = BatchGenomeEvaluator(
             make_net=self._make_net,
             activate_net=self._activate_net,
             make_env=self._make_env,
             n_genomes_batch=n_parallel,
             trials_per_genome=self.config.trials,
-            n_steps=getattr(self.task_config, 'max_steps', 200),
+            n_steps=self._n_steps(),
             device=self.config.device,
             env_seed=generation_env_seed,
         )
-        
-        # 分批处理所有基因组
+
         for batch_start in range(0, len(genomes), n_parallel):
             batch_end = min(batch_start + n_parallel, len(genomes))
             batch_genomes = genomes[batch_start:batch_end]
-            
-            # 批量评估，返回详细统计
-            results = batch_evaluator.eval_genomes_batch(
-                batch_genomes,
-                config,
-            )
-            
-            # 更新适应度和详细统计
-            genomes_dict = dict(genomes)
-            for genome_id, stats in results:
-                genomes_dict[genome_id].fitness = stats.mean  # 使用均值作为适应度
-                genomes_dict[genome_id].eval_stats = stats    # 存储详细统计，供LogReporter使用
+            results = batch_evaluator.eval_genomes_batch(batch_genomes, config)
+            self._assign_eval_stats(genomes, results)
     
     def _eval_genomes_parallel(self, genomes, config, generation, generation_env_seed):
         """CPU多进程并行评估"""
-        # 准备评估器参数
-        evaluator_kwargs = {
-            'make_net': self._make_net,
-            'activate_net': self._activate_net,
-            'make_env': self._make_env,
-            'n_steps': getattr(self.task_config, 'max_steps', 200),
-            'batch_size': self.config.trials,
-            'render': self.config.train_render,  # 训练时根据train_render参数决定是否渲染
-            'save_render': False,   #训练时不保存视频(若每个基因都保存太多了，因而当前保存命名没有区分基因id)
-            'video_dir': self.video_dir,
-            'generation': generation,
-            'env_seed': generation_env_seed,
-            'scenario_name': self.scenario_name
-        }
+        evaluator_kwargs = self._build_evaluator_kwargs(
+            generation=generation,
+            env_seed=generation_env_seed,
+            render=self.config.train_render,
+            save_render=False,
+        )
 
-        # 准备多进程参数
         args_list = [
             (genome_id, genome, config, evaluator_kwargs)
-            for genome_id, genome in genomes                #会对这一代所有基因进行评估（包括从上一代保留下来的精英）
+            for genome_id, genome in genomes
         ]
 
-        # 并行评估
         if self.config.n_parallel > 1:
             ctx = multiprocessing.get_context("spawn")
             with ctx.Pool(self.config.n_parallel) as pool:
                 results = pool.map(self._eval_genome_worker, args_list)
         else:
-            # 单进程（便于调试）
             results = [self._eval_genome_worker(args) for args in args_list]
 
-        # 更新适应度和详细统计
-        genomes_dict = dict(genomes)
-        for genome_id, stats in results:
-            genomes_dict[genome_id].fitness = stats.mean  # 使用均值作为适应度
-            genomes_dict[genome_id].eval_stats = stats    # 存储详细统计，供LogReporter使用
+        self._assign_eval_stats(genomes, results)
 
     def run(self):
-        """运行实验：训练（如需要）+ 展示结果
-        
-        流程：
-        1. 如果 render=True，直接展示已有结果（不训练）
-        2. 否则，检查是否需要训练（基于overwrite和检查点状态）
-        3. 如果需要训练：初始化/恢复种群，运行进化
-        4. 展示实验结果
-        """
-        # 如果 render=True，直接展示已有结果，不再训练
         if self.config.render:
-
             self.result_of_experiment()
             return
-        
-        need_train = False
-        checkpoint_file = self._find_latest_checkpoint(self.checkpoint_dir)
-        
-        # 判断是否需要训练
-        if self.config.overwrite:
-            # 覆盖模式：忽略检查点，重新训练(已保存的检查点会被覆盖（注意：不会先将之前保存的检查点先删除，因而未被覆盖的仍是之前训练的结果），log.json是在后面继续添加)
-            print("overwrite=True，将重新开始训练（忽略已有检查点）")
-            need_train = True
-        elif checkpoint_file is None:
-            # 没有检查点：从头开始训练
-            print("未找到检查点，将从头开始训练")
-            need_train = True
-        else:
-            # 有检查点：检查是否已完成
-            last_gen = int(checkpoint_file.split('-')[-1])
-            if last_gen < self.config.generations - 1:
-                print(f"检查点代数({last_gen}) < 目标代数({self.config.generations})，继续训练")
-                need_train = True
-            else:
-                print(f"训练已完成 (检查点代数: {last_gen})")
-        
-        # 执行训练
+
+        need_train, checkpoint_file = self._resolve_training_state()
         if need_train:
-            self._train(checkpoint_file if not self.config.overwrite else None)
-        
-        # 展示实验结果
+            self._train(checkpoint_file)
+
         self.result_of_experiment()
 
-    def _train(self, checkpoint_file=None):
-        """执行NEAT进化训练（内部方法）
-        
-        Args:
-            checkpoint_file: 检查点文件路径，None表示从头开始
-        """
-        print(f"\n开始训练 - 进化{self.config.generations}代\n")
+    def _resolve_training_state(self):
+        checkpoint_file = find_latest_checkpoint(self.checkpoint_dir)
 
-        # 初始化种群
+        if self.config.overwrite:
+            print("train: overwrite enabled, starting fresh")
+            return True, None
+
+        if checkpoint_file is None:
+            print("train: no checkpoint, starting fresh")
+            return True, None
+
+        last_gen = int(checkpoint_file.split('-')[-1])
+        if last_gen < self.config.generations - 1:
+            print(f"train: resume from gen {last_gen}")
+            return True, checkpoint_file
+
+        print(f"train: already complete at gen {last_gen}")
+        return False, checkpoint_file
+
+    def _init_population(self, checkpoint_file=None):
         if checkpoint_file is not None:
-            # 从检查点恢复
-            print(f"从检查点恢复: {checkpoint_file}")
-            #self.population = neat.Checkpointer.restore_checkpoint(checkpoint_file)        #neat原生实现，但创建种群中有小问题，见better_pop.py
-            self.population = self.restore_checkpoint(checkpoint_file)
+            print(f"resume: {checkpoint_file}")
+            self.population = restore_population_checkpoint(checkpoint_file, better_Population)
             self.just_restored = True
-            k = int(checkpoint_file.split('-')[-1])         #用于计算还要训练多少代
+            start_generation = int(checkpoint_file.split('-')[-1])
         else:
-            # 创建新种群
             self.population = better_Population(self.neat_config)
-            k = 0
+            start_generation = 0
 
-        # 添加报告器
+        return start_generation
+
+    def _reset_global_best_record(self, checkpoint_file):
+        reset_global_best = checkpoint_file is None
+        if reset_global_best and os.path.exists(self.global_best_package_path):
+            os.remove(self.global_best_package_path)
+        return reset_global_best
+
+    def _restore_global_best_record(self, checkpoint_file):
+        if checkpoint_file is not None:
+            global_best_package = load_global_best_package(self.global_best_package_path)
+            if global_best_package is not None:
+                self.population.best_genome = global_best_package["genome"]
+                print(
+                    "resume_best: "
+                    f"gen={global_best_package.get('generation')}, "
+                    f"fitness={global_best_package.get('fitness'):.4f}"
+                )
+
+    def _add_reporters(self, reset_global_best):
         self.population.add_reporter(neat.StdOutReporter(True))
-        stats = neat.StatisticsReporter()
-        self.population.add_reporter(stats)
+        self.population.add_reporter(neat.StatisticsReporter())
 
-        # 添加检查点保存器
-        checkpointer = neat.Checkpointer(
-            self.config.checkpt_freq,
-            filename_prefix=os.path.join(self.checkpoint_dir, 'neat-checkpoint-')
+        self.population.add_reporter(
+            neat.Checkpointer(
+                self.config.checkpt_freq,
+                filename_prefix=os.path.join(self.checkpoint_dir, 'neat-checkpoint-')
+            )
         )
-        self.population.add_reporter(checkpointer)
+        self.population.add_reporter(
+            GlobalBestReporter(
+                self.global_best_package_path,
+                reset_existing=reset_global_best,
+            )
+        )
 
-        # 添加日志记录器（如果启用了collect_results）
         if self.config.collect_results:
             log_file = os.path.join(self.log_dir, "log.json")
             logger = LogReporter(log_file, self._get_best_stats, eval_with_debug=False)
-            # 如果刚从检查点恢复，跳过第一次日志记录（避免重复记录）
             if self.just_restored:
                 logger.skip_next_log = True
             self.population.add_reporter(logger)
-            print(f"启用日志记录: {log_file}")
-            print(f"最佳个体详细统计: {os.path.join(self.log_dir, 'best_log.json')}")
+            print(f"log: {log_file}")
+            print(f"best_log: {os.path.join(self.log_dir, 'best_log.json')}")
 
-        # 运行进化
+    def _finalize_winner(self, winner):
+        global_best_package = self._get_global_best_package()
+        if global_best_package is not None:
+            return global_best_package["genome"]
+        return winner
+
+    def _print_training_summary(self, winner, elapsed_time):
+        print_block(
+            "Train",
+            [
+                ("minutes", f"{elapsed_time / 60:.2f}"),
+                ("generations", self.config.generations),
+                ("best_fitness", f"{winner.fitness:.4f}"),
+            ],
+        )
+
+    def _train(self, checkpoint_file=None):
+        print(f"\n[Train]\ngenerations: {self.config.generations}")
+
+        start_generation = self._init_population(checkpoint_file)
+        reset_global_best = self._reset_global_best_record(checkpoint_file)
+        self._restore_global_best_record(checkpoint_file)
+        self._add_reporters(reset_global_best)
+
         start_time = time.time()
         winner = self.population.run(
             self._eval_genomes,
-            self.config.generations - k           #还需要评估的代数    
+            self.config.generations - start_generation
         )
+        winner = self._finalize_winner(winner)
         elapsed_time = time.time() - start_time
 
-        print(f"\n{'='*60}")
-        print("训练统计")
-        print(f"{'='*60}")
-        print(
-            f"耗时: {elapsed_time/60:.2f} 分钟, "
-            f"共 {self.config.generations} 代, "
-            f"最佳适应度: {winner.fitness:.4f}"
-        )
-        print(f"{'='*60}")
-
+        self._print_training_summary(winner, elapsed_time)
         return winner
 
-    def _find_latest_checkpoint(self, checkpoint_dir):
-        """查找最新的检查点文件
+    def _load_global_best_package(self):
+        return load_global_best_package(self.global_best_package_path)
 
-        Args:
-            checkpoint_dir (str): 检查点目录
-
-        Returns:
-            str or None: 最新检查点文件路径
-        """
-        if not os.path.exists(checkpoint_dir):
-            return None
-
-        checkpoints = [f for f in os.listdir(checkpoint_dir) if f.startswith('neat-checkpoint-')]
-        if not checkpoints:
-            return None
-
-        # 按代数排序
-        checkpoints.sort(key=lambda x: int(x.split('-')[-1]))
-        return os.path.join(checkpoint_dir, checkpoints[-1])
-
-
-    @staticmethod
-    def restore_checkpoint(filename):
-        """
-        从 checkpoint(检查点)文件恢复 NEAT 进化状态。
-
-        @param filename: 需要恢复的 checkpoint 文件路径。
-        """
-        with gzip.open(filename) as f:
-            generation, config, population, species_set, rndstate = pickle.load(f)
-            random.setstate(rndstate)
-            return better_Population(config, (population, species_set, generation))
+    def _get_global_best_package(self):
+        package = self._load_global_best_package()
+        if package is not None:
+            package.setdefault("source", "saved_global_best")
+            return package
+        return None
     
     ####################################################################################################################
     # output functions
     ####################################################################################################################
-    def result_of_experiment(self):
-        """展示指定代数的最优个体结果
-        
-        根据 self.config.show_gen 参数：
-        - show_gen >= 0: 展示指定代数的最优个体
-        - show_gen < 0: 展示最后一代的最优个体（默认）
-        """
-        print(f"\n{'='*60}")
-        print("展示实验结果")
-        print(f"{'='*60}\n")
-        
-        # 查找检查点
-        if not os.path.exists(self.checkpoint_dir):
-            raise FileNotFoundError(f"检查点目录不存在: {self.checkpoint_dir}")
-        
-        checkpoints = [f for f in os.listdir(self.checkpoint_dir) if f.startswith('neat-checkpoint-')]
-        if not checkpoints:
-            raise FileNotFoundError(f"未找到检查点文件，请先训练模型")
-        
-        # 按代数排序
-        checkpoints.sort(key=lambda x: int(x.split('-')[-1]))
-        
-        # 确定要展示的代数
+    def _resolve_result_target(self):
         if self.config.show_gen >= 0:
-            # 指定代数
-            target_gen = self.config.show_gen
-            checkpoint_name = f"neat-checkpoint-{target_gen}"
-            if checkpoint_name not in checkpoints:
-                # 指定代数找不到，回退到最后一代
-                print(f"警告：未找到第 {target_gen} 代的检查点，将展示最后一代")
-                checkpoint_file = os.path.join(self.checkpoint_dir, checkpoints[-1])
-                target_gen = int(checkpoints[-1].split('-')[-1])
-            else:
-                checkpoint_file = os.path.join(self.checkpoint_dir, checkpoint_name)
-        else:
-            # 最后一代
-            checkpoint_file = os.path.join(self.checkpoint_dir, checkpoints[-1])
-            target_gen = int(checkpoints[-1].split('-')[-1])
-        
-        print(f"加载第 {target_gen} 代的检查点: {checkpoint_file} -> 评估最佳个体...")
-        
-        # 加载检查点
-        population = neat.Checkpointer.restore_checkpoint(checkpoint_file)
-        
-        # 获取最佳个体
-        best_genome = None
-        best_fitness = float('-inf')
-        for genome_id, genome in population.population.items():
-            if genome.fitness is not None and genome.fitness > best_fitness:
-                best_fitness = genome.fitness
-                best_genome = genome
-        
-        if best_genome is None:
-            raise ValueError("未找到有效的最佳个体")
-        
-        #print(f"最佳个体训练时适应度: {best_fitness:.4f}\n")
-        
-        # 评估最佳个体（用于统计和渲染）
+            return load_generation_target(self.checkpoint_dir, self.config.show_gen)
+        return load_global_best_target(self.global_best_package_path)
+
+    def _result_env_seed(self, generation: int) -> int:
+        if self.config.render:
+            return time.time_ns() % (2**32)
+        return self._get_generation_env_seed(generation)
+
+    def _print_result_summary(self, target, stats, elapsed_time):
+        print_block(
+            "Result",
+            [
+                ("target", target.label),
+                ("seconds", f"{elapsed_time:.2f}"),
+                ("steps", self._n_steps()),
+                ("trials", self.config.trials),
+                ("device", self.config.device),
+                ("fitness_mean", f"{stats.mean:.4f}"),
+                ("fitness_std", f"{stats.std:.4f}"),
+                ("fitness_max", f"{stats.max_val:.4f}"),
+                ("fitness_min", f"{stats.min_val:.4f}"),
+            ],
+        )
+
+    def result_of_experiment(self):
+        target = self._resolve_result_target()
+        print(f"\n[Result]\n{target.message}")
+
         start_time = time.time()
-        
-        # 创建评估器（启用渲染如果设置了render参数）
-        evaluator_kwargs = {
-            'make_net': self._make_net,
-            'activate_net': self._activate_net,
-            'make_env': self._make_env,
-            'n_steps': getattr(self.task_config, 'max_steps', 200),
-            'batch_size': self.config.trials,
-            'render': self.config.render,
-            'save_render': self.config.save_render,
-            'video_dir': self.video_dir,
-            'generation': target_gen,
-            'env_seed': time.time_ns() % (2**32) if self.config.render else self._get_generation_env_seed(target_gen),
-            'scenario_name': self.scenario_name
-        }
-        
-        evaluator = GenomeEvaluator(**evaluator_kwargs)
-        # 评估返回详细统计
-        stats = evaluator.eval_genome(best_genome, self.neat_config, debug=True)
-        
+        evaluator = GenomeEvaluator(
+            **self._build_evaluator_kwargs(
+                generation=target.generation,
+                env_seed=self._result_env_seed(target.generation),
+                render=self.config.render,
+                save_render=self.config.save_render,
+            )
+        )
+        stats = evaluator.eval_genome(target.genome, target.neat_config, debug=True)
         elapsed_time = time.time() - start_time
-        
-        # 输出统计信息
-        print(f"\n{'='*60}")
-        print("评估统计")
-        print(f"{'='*60}")
-        print(f"耗时: {elapsed_time:.2f} 秒")
-        print(f"步数: {getattr(self.task_config, 'max_steps', 200)}")
-        print(f"并行评估环境数: {self.config.trials}")
-        print(f"设备: {self.config.device}")
-        print(f"平均适应度: {stats.mean:.4f}")
-        print(f"适应度标准差: {stats.std:.4f}")
-        print(f"适应度最大值: {stats.max_val:.4f}")
-        print(f"适应度最小值: {stats.min_val:.4f}")
-        print(f"{'='*60}\n")
+        self._print_result_summary(target, stats, elapsed_time)

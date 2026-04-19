@@ -24,7 +24,9 @@ import numpy as np
 from typing import List, Tuple, Callable
 
 from pytorch_neat.batched_recurrent_net import BatchedRecurrentNet
+from pytorch_neat.activations import normalize_output_masks
 from .evaluator import EvalStats
+from .runtime import get_action_bounds
 
 
 class BatchGenomeEvaluator:
@@ -196,7 +198,6 @@ class BatchGenomeEvaluator:
         sample_net = self.make_net(genomes[0][1], config, 1)
         
         # 从 sample_net 中提取网络配置参数
-        activation = sample_net.activation
         prune_empty = getattr(sample_net, "prune_empty", False)
         use_current_activs = sample_net.use_current_activs
         n_internal_steps = sample_net.n_internal_steps
@@ -205,7 +206,6 @@ class BatchGenomeEvaluator:
         batched_net = BatchedRecurrentNet.from_genomes(
             genomes, config,
             trials_per_genome=self.trials_per_genome,
-            activation=activation,
             prune_empty=prune_empty,
             use_current_activs=use_current_activs,
             n_internal_steps=n_internal_steps,
@@ -235,10 +235,10 @@ class BatchGenomeEvaluator:
                 outputs = batched_net.activate(agent_obs)
                 
                 # 批量处理动作
-                # 使用传入的 activate_net 函数的动作处理逻辑
-                # 将批量输出展平并处理
                 actions[agent_idx] = self._process_actions_batch(
-                    outputs, agent_idx
+                    outputs,
+                    batched_net.output_activation_masks,
+                    agent_idx,
                 )
             
             # 执行动作
@@ -278,6 +278,7 @@ class BatchGenomeEvaluator:
     def _process_actions_batch(
         self, 
         outputs: torch.Tensor, 
+        output_activation_masks,
         agent_idx: int
     ) -> torch.Tensor:
         """
@@ -295,26 +296,13 @@ class BatchGenomeEvaluator:
         """
         u_range = self.u_ranges[agent_idx]
         dynamics_type = self.dynamics_types[agent_idx]
-        
-        # 展平输出: (total_envs, action_dim)
-        outputs_flat = outputs.view(-1, self.action_dim)
-        
-        # 创建一个临时的网络包装器，用于复用 activate_net 的动作处理逻辑
-        class TempNet:
-            def __init__(self, output):
-                self.output = output
-            def activate(self, obs):
-                return self.output
-        
-        temp_net = TempNet(outputs_flat)
-        
-        # 使用传入的 activate_net 函数处理动作
-        # 注意：这里传入的 obs 不会被使用，因为 TempNet.activate 直接返回预计算的输出
-        actions = self.activate_net(
-            temp_net,
-            outputs_flat,  # 这个参数不会被使用
-            u_range=u_range,
-            dynamics_type=dynamics_type
+        u_min, u_max = get_action_bounds(
+            u_range,
+            device=outputs.device,
+            dtype=outputs.dtype,
+            dynamics_type=dynamics_type,
         )
-        
-        return actions
+
+        normalized = normalize_output_masks(outputs, output_activation_masks)
+        actions = normalized * (u_max - u_min) + u_min
+        return actions.view(-1, self.action_dim)

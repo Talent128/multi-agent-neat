@@ -17,8 +17,10 @@ import torch
 import numpy as np
 from typing import List, Tuple, Callable
 
-# 导入与 RecurrentNet 相同的激活函数，确保行为一致
-from .activations import sigmoid_activation
+from .activations import (
+    build_batched_activation_masks,
+    apply_activation_masks,
+)
 
 
 class BatchedRecurrentNet:
@@ -47,6 +49,8 @@ class BatchedRecurrentNet:
         input_to_output_weights: torch.Tensor,
         hidden_to_output_weights: torch.Tensor,
         output_to_output_weights: torch.Tensor,
+        hidden_activation_names: List[List[str]],
+        output_activation_names: List[List[str]],
         hidden_responses: torch.Tensor,
         output_responses: torch.Tensor,
         hidden_biases: torch.Tensor,
@@ -54,7 +58,6 @@ class BatchedRecurrentNet:
         hidden_masks: torch.Tensor,
         output_masks: torch.Tensor,
         use_current_activs: bool = False,
-        activation: Callable = sigmoid_activation,
         n_internal_steps: int = 1,
         dtype: torch.dtype = torch.float32,
         device: str = None,
@@ -74,6 +77,8 @@ class BatchedRecurrentNet:
             input_to_output_weights: (n_genomes, max_outputs, max_inputs) 输入到输出权重
             hidden_to_output_weights: (n_genomes, max_outputs, max_hidden) 隐藏层到输出权重
             output_to_output_weights: (n_genomes, max_outputs, max_outputs) 输出递归权重
+            hidden_activation_names: 每个 genome 的隐藏节点激活函数名字
+            output_activation_names: 每个 genome 的输出节点激活函数名字
             hidden_responses: (n_genomes, max_hidden) 隐藏层响应系数
             output_responses: (n_genomes, max_outputs) 输出层响应系数
             hidden_biases: (n_genomes, max_hidden) 隐藏层偏置
@@ -81,7 +86,6 @@ class BatchedRecurrentNet:
             hidden_masks: (n_genomes, max_hidden) 隐藏层掩码（标记有效节点）
             output_masks: (n_genomes, max_outputs) 输出层掩码（标记有效节点）
             use_current_activs: 是否使用当前激活值（而非上一时刻的）
-            activation: 激活函数
             n_internal_steps: 内部迭代步数
             dtype: 数据类型
             device: 计算设备
@@ -92,10 +96,17 @@ class BatchedRecurrentNet:
         self.max_hidden = max_hidden
         self.max_outputs = max_outputs
         self.use_current_activs = use_current_activs
-        self.activation = activation
         self.n_internal_steps = n_internal_steps
         self.dtype = dtype
         self.device = device if device else ('cuda' if torch.cuda.is_available() else 'cpu')
+        self.hidden_activation_names = tuple(tuple(names) for names in hidden_activation_names)
+        self.output_activation_names = tuple(tuple(names) for names in output_activation_names)
+        self.hidden_activation_masks = build_batched_activation_masks(
+            self.hidden_activation_names, device=self.device
+        )
+        self.output_activation_masks = build_batched_activation_masks(
+            self.output_activation_names, device=self.device
+        )
         
         # 注册权重张量
         self.input_to_hidden = input_to_hidden_weights.to(dtype=dtype, device=self.device)
@@ -137,7 +148,7 @@ class BatchedRecurrentNet:
             self.n_genomes, self.trials_per_genome, self.max_outputs,
             dtype=self.dtype, device=self.device
         )
-    
+
     def activate(self, inputs: torch.Tensor) -> torch.Tensor:
         """
         批量前向传播
@@ -181,10 +192,12 @@ class BatchedRecurrentNet:
                     # 合并并应用响应系数和偏置
                     hidden_pre = (hidden_input + hidden_recur + hidden_output)
                     hidden_pre = self.hidden_responses.unsqueeze(1) * hidden_pre + self.hidden_biases.unsqueeze(1)
-                    
-                    # 激活
-                    self.activs = self.activation(hidden_pre)
-                    
+
+                    # 按激活类型向量化应用，避免逐 genome 的 Python 循环。
+                    self.activs = apply_activation_masks(
+                        hidden_pre, self.hidden_activation_masks
+                    )
+
                     # 应用掩码
                     self.activs = self.activs * self.hidden_masks.unsqueeze(1)
                 
@@ -211,9 +224,11 @@ class BatchedRecurrentNet:
             
             # 应用响应系数和偏置
             output_pre = self.output_responses.unsqueeze(1) * output_pre + self.output_biases.unsqueeze(1)
-            
-            # 激活
-            self.outputs = self.activation(output_pre)
+
+            # 按激活类型向量化应用，避免逐 genome 的 Python 循环。
+            self.outputs = apply_activation_masks(
+                output_pre, self.output_activation_masks
+            )
             
             return self.outputs
     
@@ -235,7 +250,6 @@ class BatchedRecurrentNet:
         genomes: List[Tuple[int, object]],
         config,
         trials_per_genome: int = 1,
-        activation: Callable = sigmoid_activation,
         prune_empty: bool = False,
         use_current_activs: bool = False,
         n_internal_steps: int = 1,
@@ -248,7 +262,6 @@ class BatchedRecurrentNet:
             genomes: [(genome_id, genome), ...] 基因组列表
             config: NEAT配置
             trials_per_genome: 每个基因组的试验次数
-            activation: 激活函数
             prune_empty: 是否剪枝空节点
             use_current_activs: 是否使用当前激活值
             n_internal_steps: 内部迭代步数
@@ -261,6 +274,7 @@ class BatchedRecurrentNet:
         
         n_genomes = len(genomes)
         genome_config = config.genome_config
+        padding_activation_name = getattr(genome_config, "activation_default", "sigmoid")
         
         # 获取输入输出节点信息
         input_keys = list(genome_config.input_keys)
@@ -275,6 +289,8 @@ class BatchedRecurrentNet:
         all_hidden_keys = []
         all_required_nodes = []
         all_nonempty_nodes = []
+        all_hidden_activation_names = []
+        all_output_activation_names = []
         
         for _, genome in genomes:
             # 获取对输出有贡献的节点（与 RecurrentNet.create 一致）
@@ -294,6 +310,18 @@ class BatchedRecurrentNet:
             # 隐藏节点：与 RecurrentNet.create 使用相同的顺序
             hidden_keys = [k for k in genome.nodes.keys() if k not in output_keys]
             all_hidden_keys.append(hidden_keys)
+            all_hidden_activation_names.append(
+                [
+                    genome.nodes[k].activation
+                    for k in hidden_keys
+                ]
+            )
+            all_output_activation_names.append(
+                [
+                    genome.nodes[k].activation
+                    for k in output_keys
+                ]
+            )
             if len(hidden_keys) > max_hidden:
                 max_hidden = len(hidden_keys)
         
@@ -310,6 +338,12 @@ class BatchedRecurrentNet:
         output_responses = torch.ones(n_genomes, num_outputs)
         hidden_biases = torch.zeros(n_genomes, max_hidden)
         output_biases = torch.zeros(n_genomes, num_outputs)
+        hidden_activation_names = [
+            [padding_activation_name] * max_hidden for _ in range(n_genomes)
+        ]
+        output_activation_names = [
+            list(names) for names in all_output_activation_names
+        ]
         
         # 初始化掩码
         hidden_masks = torch.zeros(n_genomes, max_hidden)
@@ -335,6 +369,7 @@ class BatchedRecurrentNet:
                 hidden_responses[g_idx, h_idx] = node.response
                 hidden_biases[g_idx, h_idx] = node.bias
                 hidden_masks[g_idx, h_idx] = 1.0
+                hidden_activation_names[g_idx][h_idx] = all_hidden_activation_names[g_idx][h_idx]
             
             # 设置输出节点的响应系数和偏置
             for o_idx, o_key in enumerate(output_keys):
@@ -418,6 +453,8 @@ class BatchedRecurrentNet:
             input_to_output_weights=input_to_output,
             hidden_to_output_weights=hidden_to_output,
             output_to_output_weights=output_to_output,
+            hidden_activation_names=hidden_activation_names,
+            output_activation_names=output_activation_names,
             hidden_responses=hidden_responses,
             output_responses=output_responses,
             hidden_biases=hidden_biases,
@@ -425,7 +462,6 @@ class BatchedRecurrentNet:
             hidden_masks=hidden_masks,
             output_masks=output_masks,
             use_current_activs=use_current_activs,
-            activation=activation,
             n_internal_steps=n_internal_steps,
             device=device,
         )

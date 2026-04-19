@@ -11,20 +11,8 @@ from torchrl.data import Composite, Unbounded
 
 from benchmarl.models.common import Model, ModelConfig
 
-from .activations import sigmoid_activation, tanh_activation
+from .activations import normalize_output_groups
 from .differentiable_recurrent_net import DifferentiableRecurrentNet
-
-
-def _resolve_activation(name: str):
-    activations = {
-        "sigmoid": sigmoid_activation,
-        "tanh": tanh_activation,
-    }
-    if name not in activations:
-        raise ValueError(
-            f"Unsupported NEAT activation '{name}'. Supported values: {sorted(activations)}"
-        )
-    return activations[name]
 
 
 def _load_genome_package(package_path: str):
@@ -43,7 +31,6 @@ class BenchmarlRecurrentPolicy(Model):
     def __init__(
         self,
         genome_package_path: str,
-        activation_name: str,
         prune_empty: bool,
         use_current_activs: bool,
         n_internal_steps: int,
@@ -81,7 +68,6 @@ class BenchmarlRecurrentPolicy(Model):
         self._source_generation = package.get("generation")
         self._source_fitness = package.get("fitness")
 
-        self.activation_name = activation_name
         self.tanh_output_dist = tanh_output_dist
         self.std_bias_init = std_bias_init
 
@@ -89,7 +75,6 @@ class BenchmarlRecurrentPolicy(Model):
             genome=package["genome"],
             config=package["neat_config"],
             batch_size=1,
-            activation=_resolve_activation(activation_name),
             prune_empty=prune_empty,
             use_current_activs=use_current_activs,
             n_internal_steps=n_internal_steps,
@@ -297,7 +282,7 @@ class BenchmarlRecurrentPolicy(Model):
             next_hidden = prev_hidden
             activs_for_output = prev_hidden
             for _ in range(self.core.n_internal_steps):
-                next_hidden = self.core.activation(
+                hidden_pre = (
                     self.core.hidden_responses
                     * (
                         self.core.input_to_hidden.mm(inputs.t()).t()
@@ -306,6 +291,7 @@ class BenchmarlRecurrentPolicy(Model):
                     )
                     + self.core.hidden_biases
                 )
+                next_hidden = self.core.apply_hidden_activations(hidden_pre)
             if self.core.use_current_activs:
                 activs_for_output = next_hidden
 
@@ -316,9 +302,8 @@ class BenchmarlRecurrentPolicy(Model):
         if self.core.n_hidden > 0:
             output_inputs += self.core.hidden_to_output.mm(activs_for_output.t()).t()
 
-        next_outputs = self.core.activation(
-            self.core.output_responses * output_inputs + self.core.output_biases
-        )
+        output_pre = self.core.output_responses * output_inputs + self.core.output_biases
+        next_outputs = self.core.apply_output_activations(output_pre)
         return next_hidden, next_outputs
 
     def _build_actor_output(self, core_outputs: torch.Tensor) -> torch.Tensor:
@@ -336,13 +321,8 @@ class BenchmarlRecurrentPolicy(Model):
     def _map_core_output_to_action(self, core_outputs: torch.Tensor) -> torch.Tensor:
         low = self.action_low.view(*([1] * (core_outputs.ndim - 1)), -1)
         high = self.action_high.view(*([1] * (core_outputs.ndim - 1)), -1)
-        if self.activation_name == "sigmoid":
-            bounded = core_outputs.clamp(0.0, 1.0)
-            return low + bounded * (high - low)
-        if self.activation_name == "tanh":
-            bounded = core_outputs.clamp(-1.0, 1.0)
-            return low + (bounded + 1.0) * 0.5 * (high - low)
-        return core_outputs.clamp(low, high)
+        normalized = normalize_output_groups(core_outputs, self.core.output_activation_groups)
+        return low + normalized * (high - low)
 
     def _action_to_actor_param(self, action_values: torch.Tensor) -> torch.Tensor:
         if not self.tanh_output_dist:
@@ -359,7 +339,6 @@ class BenchmarlRecurrentPolicy(Model):
 @dataclass
 class BenchmarlRecurrentPolicyConfig(ModelConfig):
     genome_package_path: str
-    activation_name: str = "sigmoid"
     prune_empty: bool = False
     use_current_activs: bool = False
     n_internal_steps: int = 1

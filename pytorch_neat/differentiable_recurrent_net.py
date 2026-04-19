@@ -20,7 +20,7 @@
 import torch
 import torch.nn as nn
 import numpy as np
-from .activations import sigmoid_activation
+from .activations import build_activation_groups, apply_activation_groups
 
 
 def dense_from_coo(shape, conns, dtype=torch.float32, device=None):
@@ -54,11 +54,11 @@ class DifferentiableRecurrentNet(nn.Module):
     def __init__(self, n_inputs, n_hidden, n_outputs,
                  input_to_hidden, hidden_to_hidden, output_to_hidden,
                  input_to_output, hidden_to_output, output_to_output,
+                 hidden_activation_names, output_activation_names,
                  hidden_responses, output_responses,
                  hidden_biases, output_biases,
                  batch_size=1,
                  use_current_activs=False,
-                 activation=sigmoid_activation,
                  n_internal_steps=1,
                  dtype=torch.float32,
                  device=None,
@@ -83,13 +83,20 @@ class DifferentiableRecurrentNet(nn.Module):
         self.device = device
         
         self.use_current_activs = use_current_activs
-        self.activation = activation
         self.n_internal_steps = n_internal_steps
         self.dtype = dtype
         
         self.n_inputs = n_inputs
         self.n_hidden = n_hidden
         self.n_outputs = n_outputs
+        self.hidden_activation_names = tuple(hidden_activation_names)
+        self.output_activation_names = tuple(output_activation_names)
+        self.hidden_activation_groups = build_activation_groups(
+            self.hidden_activation_names, device=device
+        )
+        self.output_activation_groups = build_activation_groups(
+            self.output_activation_names, device=device
+        )
         
         # 保存连接键映射（用于同步回genome）
         self.connection_keys = connection_keys or {}
@@ -121,6 +128,12 @@ class DifferentiableRecurrentNet(nn.Module):
         
         self.batch_size = batch_size
         self.reset(batch_size)
+
+    def apply_hidden_activations(self, values):
+        return apply_activation_groups(values, self.hidden_activation_groups)
+
+    def apply_output_activations(self, values):
+        return apply_activation_groups(values, self.output_activation_groups)
     
     def reset(self, batch_size=1):
         """重置隐藏状态"""
@@ -158,11 +171,12 @@ class DifferentiableRecurrentNet(nn.Module):
         
         if self.n_hidden > 0:
             for _ in range(self.n_internal_steps):
-                self.activs = self.activation(self.hidden_responses * (
+                hidden_pre = self.hidden_responses * (
                     self.input_to_hidden.mm(inputs.t()).t() +
                     self.hidden_to_hidden.mm(self.activs.t()).t() +
-                    self.output_to_hidden.mm(self.outputs.t()).t()) +
-                    self.hidden_biases)
+                    self.output_to_hidden.mm(self.outputs.t()).t()
+                ) + self.hidden_biases
+                self.activs = self.apply_hidden_activations(hidden_pre)
             if self.use_current_activs:
                 activs_for_output = self.activs
         
@@ -171,8 +185,8 @@ class DifferentiableRecurrentNet(nn.Module):
         if self.n_hidden > 0:
             output_inputs += self.hidden_to_output.mm(activs_for_output.t()).t()
         
-        self.outputs = self.activation(
-            self.output_responses * output_inputs + self.output_biases)
+        output_pre = self.output_responses * output_inputs + self.output_biases
+        self.outputs = self.apply_output_activations(output_pre)
         
         return self.outputs
     
@@ -218,7 +232,7 @@ class DifferentiableRecurrentNet(nn.Module):
             # 简化版：直接通过索引同步hidden和output节点
 
     @staticmethod
-    def create(genome, config, batch_size=1, activation=sigmoid_activation,
+    def create(genome, config, batch_size=1,
                prune_empty=False, use_current_activs=False, n_internal_steps=1,
                device=None):
         """
@@ -239,6 +253,14 @@ class DifferentiableRecurrentNet(nn.Module):
         hidden_keys = [k for k in genome.nodes.keys()
                        if k not in genome_config.output_keys]
         output_keys = list(genome_config.output_keys)
+        hidden_activation_names = [
+            genome.nodes[k].activation
+            for k in hidden_keys
+        ]
+        output_activation_names = [
+            genome.nodes[k].activation
+            for k in output_keys
+        ]
         
         hidden_responses = [genome.nodes[k].response for k in hidden_keys]
         output_responses = [genome.nodes[k].response for k in output_keys]
@@ -329,10 +351,10 @@ class DifferentiableRecurrentNet(nn.Module):
             n_inputs, n_hidden, n_outputs,
             input_to_hidden, hidden_to_hidden, output_to_hidden,
             input_to_output, hidden_to_output, output_to_output,
+            hidden_activation_names, output_activation_names,
             hidden_responses, output_responses,
             hidden_biases, output_biases,
             batch_size=batch_size,
-            activation=activation,
             use_current_activs=use_current_activs,
             n_internal_steps=n_internal_steps,
             device=device,
@@ -556,4 +578,3 @@ def finetune_elites_in_generation(
         print(f"Elite finetuned: {original_fitness:.2f} -> {new_fitness:.2f}")
     
     return elites
-

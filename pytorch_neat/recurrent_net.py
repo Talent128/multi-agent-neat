@@ -14,7 +14,7 @@
 
 import torch
 import numpy as np
-from .activations import sigmoid_activation
+from .activations import build_activation_groups, apply_activation_groups
 
 
 # def sparse_mat(shape, conns):
@@ -60,12 +60,12 @@ class RecurrentNet():
     def __init__(self, n_inputs, n_hidden, n_outputs,
                  input_to_hidden, hidden_to_hidden, output_to_hidden,
                  input_to_output, hidden_to_output, output_to_output,
+                 hidden_activation_names, output_activation_names,
                  hidden_responses, output_responses,
                  hidden_biases, output_biases,
                  batch_size=1,
                  prune_empty=False,
                  use_current_activs=False,
-                 activation=sigmoid_activation,
                  n_internal_steps=1,
                  dtype=torch.float32,
                  device=None):
@@ -82,7 +82,6 @@ class RecurrentNet():
         self.device = device
 
         self.use_current_activs = use_current_activs
-        self.activation = activation
         self.n_internal_steps = n_internal_steps
         self.dtype = dtype
         self.prune_empty = prune_empty
@@ -90,6 +89,14 @@ class RecurrentNet():
         self.n_inputs = n_inputs
         self.n_hidden = n_hidden
         self.n_outputs = n_outputs
+        self.hidden_activation_names = tuple(hidden_activation_names)
+        self.output_activation_names = tuple(output_activation_names)
+        self.hidden_activation_groups = build_activation_groups(
+            self.hidden_activation_names, device=device
+        )
+        self.output_activation_groups = build_activation_groups(
+            self.output_activation_names, device=device
+        )
 
         if n_hidden > 0:
             self.input_to_hidden = dense_from_coo(
@@ -144,11 +151,14 @@ class RecurrentNet():
             activs_for_output = self.activs
             if self.n_hidden > 0:
                 for _ in range(self.n_internal_steps):
-                    self.activs = self.activation(self.hidden_responses * (
+                    hidden_pre = self.hidden_responses * (
                         self.input_to_hidden.mm(inputs.t()).t() +
                         self.hidden_to_hidden.mm(self.activs.t()).t() +
-                        self.output_to_hidden.mm(self.outputs.t()).t()) +
-                        self.hidden_biases)
+                        self.output_to_hidden.mm(self.outputs.t()).t()
+                    ) + self.hidden_biases
+                    self.activs = apply_activation_groups(
+                        hidden_pre, self.hidden_activation_groups
+                    )
                 if self.use_current_activs:
                     activs_for_output = self.activs
             output_inputs = (self.input_to_output.mm(inputs.t()).t() +
@@ -156,12 +166,14 @@ class RecurrentNet():
             if self.n_hidden > 0:
                 output_inputs += self.hidden_to_output.mm(
                     activs_for_output.t()).t()
-            self.outputs = self.activation(
-                self.output_responses * output_inputs + self.output_biases)
+            output_pre = self.output_responses * output_inputs + self.output_biases
+            self.outputs = apply_activation_groups(
+                output_pre, self.output_activation_groups
+            )
         return self.outputs
 
     @staticmethod
-    def create(genome, config, batch_size=1, activation=sigmoid_activation,
+    def create(genome, config, batch_size=1,
                prune_empty=False, use_current_activs=False, n_internal_steps=1,
                device=None):
         """
@@ -171,7 +183,6 @@ class RecurrentNet():
             genome: NEAT基因组
             config: NEAT配置
             batch_size: 批量大小
-            activation: 激活函数
             prune_empty: 是否剪枝空节点
             use_current_activs: 是否使用当前激活值
             n_internal_steps: 内部步数
@@ -191,6 +202,14 @@ class RecurrentNet():
                        if k not in genome_config.output_keys]
         output_keys = list(genome_config.output_keys)
 
+        hidden_activation_names = [
+            genome.nodes[k].activation
+            for k in hidden_keys
+        ]
+        output_activation_names = [
+            genome.nodes[k].activation
+            for k in output_keys
+        ]
         hidden_responses = [genome.nodes[k].response for k in hidden_keys]
         output_responses = [genome.nodes[k].response for k in output_keys]
 
@@ -261,11 +280,11 @@ class RecurrentNet():
         return RecurrentNet(n_inputs, n_hidden, n_outputs,
                             input_to_hidden, hidden_to_hidden, output_to_hidden,
                             input_to_output, hidden_to_output, output_to_output,
+                            hidden_activation_names, output_activation_names,
                             hidden_responses, output_responses,
                             hidden_biases, output_biases,
                             batch_size=batch_size,
                             prune_empty=prune_empty,
-                            activation=activation,
                             use_current_activs=use_current_activs,
                             n_internal_steps=n_internal_steps,
                             device=device)

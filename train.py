@@ -46,7 +46,7 @@ def main(cfg: DictConfig) -> None:
     
     if os.path.exists(hydra_dir) and not os.path.exists(target_hydra_dir):
         shutil.copytree(hydra_dir, target_hydra_dir)
-        print(f"Hydra配置已复制到: {target_hydra_dir}\n")
+        #print(f"Hydra配置已复制到: {target_hydra_dir}\n")
     
     # 运行训练
     experiment.run()

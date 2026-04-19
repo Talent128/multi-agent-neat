@@ -24,7 +24,10 @@ NEAT训练日志记录器
 - best_log.json: 每代最佳个体的详细统计（最佳个体适应度平均,最佳个体适应度标准差,最佳个体适应度最大值,最佳个体适应度最小值,最佳个体神经元数量,最佳个体连接数量等）
 """
 
+import copy
 import json  # JSON序列化，用于保存日志
+import os
+import pickle
 import time  # 时间测量，用于统计每代耗时
 from pprint import pprint  # 美化打印，用于终端输出
 
@@ -208,3 +211,63 @@ class LogReporter(BaseReporter):
             species: 物种对象
         """
         pass  # 不需要额外操作
+
+
+class GlobalBestReporter(BaseReporter):
+    """训练期间持久化全局最优基因组，支持断点续训后继续比较。"""
+
+    def __init__(self, package_path, reset_existing=False):
+        self.package_path = package_path
+        self.current_generation = None
+        self.best_fitness = None
+        self.best_generation = None
+
+        if reset_existing and os.path.exists(self.package_path):
+            os.remove(self.package_path)
+
+        if not reset_existing:
+            self._load_existing_package()
+
+    def _load_existing_package(self):
+        if not os.path.exists(self.package_path):
+            return
+
+        try:
+            with open(self.package_path, "rb") as f:
+                package = pickle.load(f)
+        except Exception as exc:
+            print(f"警告：读取全局最优基因组失败，忽略已有记录: {exc}")
+            return
+
+        self.best_fitness = package.get("fitness")
+        self.best_generation = package.get("generation")
+
+    def _save_package(self, best_genome, config):
+        package = {
+            "genome": copy.deepcopy(best_genome),
+            "neat_config": config,
+            "generation": self.current_generation,
+            "fitness": best_genome.fitness,
+            "genome_key": getattr(best_genome, "key", None),
+        }
+
+        tmp_path = f"{self.package_path}.tmp"
+        with open(tmp_path, "wb") as f:
+            pickle.dump(package, f, protocol=pickle.HIGHEST_PROTOCOL)
+        os.replace(tmp_path, self.package_path)
+
+    def start_generation(self, generation):
+        self.current_generation = generation
+
+    def post_evaluate(self, config, population, species, best_genome):
+        if best_genome is None or best_genome.fitness is None:
+            return
+
+        if self.best_fitness is None or best_genome.fitness > self.best_fitness:
+            self._save_package(best_genome, config)
+            self.best_fitness = best_genome.fitness
+            self.best_generation = self.current_generation
+            print(
+                f"更新全局最优基因组: generation={self.current_generation}, "
+                f"fitness={best_genome.fitness:.4f}"
+            )

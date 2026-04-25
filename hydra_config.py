@@ -11,6 +11,8 @@ from dataclasses import is_dataclass
 from pathlib import Path
 
 from experiment.experiment import Experiment, ExperimentConfig
+from ea_rl.config import EaRlExperimentConfig
+from ea_rl.trainer import EaRlExperiment
 
 _has_hydra = importlib.util.find_spec("hydra") is not None
 
@@ -21,7 +23,7 @@ if _has_hydra:
 
 def load_experiment_from_hydra(
     cfg: DictConfig, task_name: str, algorithm_name: str
-) -> Experiment:
+) -> object:
     """从Hydra配置创建实验对象
 
     Args:
@@ -32,15 +34,29 @@ def load_experiment_from_hydra(
     Returns:
         Experiment: 实验对象
     """
-    # 加载实验配置
-    experiment_config = load_experiment_config_from_hydra(cfg.experiment)
-    
-    # 加载算法配置
     algorithm_config = OmegaConf.to_object(cfg.algorithm)
-    
-    # 加载任务配置
+    branch = getattr(algorithm_config, "branch", None)
+    if branch is None and algorithm_name == "recurrent":
+        branch = "pure_neat"
+
     task_config = OmegaConf.to_object(cfg.task)
-    
+
+    if branch == "ea_rl":
+        experiment_config = OmegaConf.to_object(cfg.experiment)
+        return EaRlExperiment(
+            task_name=task_name,
+            algorithm_name=algorithm_name,
+            algorithm_config=algorithm_config,
+            task_config=task_config,
+            experiment_config=experiment_config,
+            seed=cfg.seed,
+        )
+
+    if branch != "pure_neat":
+        raise ValueError(f"未知算法分支: {branch}")
+
+    experiment_config = load_experiment_config_from_hydra(cfg.experiment)
+
     return Experiment(
         task_name=task_name,
         algorithm_name=algorithm_name,

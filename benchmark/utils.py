@@ -72,7 +72,10 @@ def find_neat_results(
     
     # 如果提供了任务配置，尝试精确匹配
     if task_config is not None:
-        from experiment.runtime import generate_results_dir_name
+        from experiment.runtime import (
+            generate_results_dir_name,
+            generate_task_branch_results_dir_name,
+        )
         
         # 创建任务配置对象（可以是普通对象或dataclass）
         # 先尝试从environments.vmas模块导入TaskConfig
@@ -99,13 +102,20 @@ def find_neat_results(
             for k, v in task_config.items():
                 setattr(task_config_obj, k, v)
         
-        # 生成预期的目录名
-        expected_dir = generate_results_dir_name(task_name, algorithm_name, task_config_obj)
-        expected_dir_name = os.path.basename(expected_dir)
-        expected_path = results_dir / expected_dir_name
-        
+        # 新目录结构：results/<task_config>/pure_neat
+        expected_dir = generate_task_branch_results_dir_name(
+            task_name, "pure_neat", task_config_obj
+        )
+        expected_path = project_root / expected_dir
         if expected_path.exists() and expected_path.is_dir():
             return str(expected_path)
+
+        # 兼容旧目录结构：results/<task>_<algorithm>_<task_config>
+        legacy_dir = generate_results_dir_name(task_name, algorithm_name, task_config_obj)
+        legacy_dir_name = os.path.basename(legacy_dir)
+        legacy_path = results_dir / legacy_dir_name
+        if legacy_path.exists() and legacy_path.is_dir():
+            return str(legacy_path)
     
     # 如果没有提供配置或精确匹配失败，尝试从配置文件加载
     if task_config is None:
@@ -115,8 +125,9 @@ def find_neat_results(
             return find_neat_results(task_name, task_config, algorithm_name)
     
     # 回退到原有行为：查找所有匹配的目录，返回最新的
-    pattern = f"{task_name}_*"
-    matches = list(results_dir.glob(pattern))
+    new_matches = list(results_dir.glob(f"{task_name}_*/pure_neat"))
+    legacy_matches = list(results_dir.glob(f"{task_name}_*"))
+    matches = new_matches + legacy_matches
     if matches:
         # 排除非目录文件，按修改时间排序，返回最新的
         dirs = [m for m in matches if m.is_dir()]

@@ -25,7 +25,9 @@ if __package__ in (None, ""):
     project_root = Path(__file__).resolve().parents[2]
     sys.path.insert(0, str(project_root))
     from experiment.vis.data import (
+        PURE_NEAT_BRANCH,
         ensure_output_dir,
+        format_result_dir_label,
         get_checkpoint_paths,
         load_best_genome_from_checkpoint,
         load_best_genome_from_generation,
@@ -35,7 +37,9 @@ if __package__ in (None, ""):
     from experiment.vis.plotting import finalize_figure
 else:
     from .data import (
+        PURE_NEAT_BRANCH,
         ensure_output_dir,
+        format_result_dir_label,
         get_checkpoint_paths,
         load_best_genome_from_checkpoint,
         load_best_genome_from_generation,
@@ -545,13 +549,14 @@ def draw_genome_network(
 
     if not compact_mode:
         ax.text(
-            0.98,
+            0.95,       #右上角统计框距离 横向位置
             0.98,
             stats_text,
-            ha="right",
+            ha="left",
             va="top",
             fontsize=8,
             transform=ax.transAxes,
+            clip_on=False,
             bbox=dict(boxstyle="round,pad=0.3", facecolor="white", edgecolor="#CCCCCC", alpha=0.9),
             color="#333333",
         )
@@ -576,7 +581,7 @@ def visualize_single_genome(
     generation: Optional[int] = None,
     output_dir: Optional[str] = None,
 ):
-    task_dir = resolve_task_dir(task_dir)
+    task_dir = resolve_task_dir(task_dir, require_kind=PURE_NEAT_BRANCH)
     output_dir = ensure_output_dir(task_dir, "genome_visualization") if output_dir is None else output_dir
     os.makedirs(output_dir, exist_ok=True)
 
@@ -591,12 +596,13 @@ def visualize_single_genome(
         if resolved_generation != generation:
             print(f"gen {generation} missing, using {checkpoint_file}")
 
-    fig, ax = plt.subplots(figsize=(10, 8))
+    fig, ax = plt.subplots(figsize=(11.2, 8))
+    fig.subplots_adjust(right=0.78) #右侧预留空间，right 越大，主图越宽，右侧空白越小
     draw_genome_network(
         genome,
         config,
         ax,
-        title=f"{os.path.basename(task_dir)}\n{selection_label}",
+        title=f"{format_result_dir_label(task_dir)}\n{selection_label}",
         compact_mode=False,
         show_activations=True,
     )
@@ -609,7 +615,15 @@ def visualize_single_genome(
         Line2D([0], [0], color="#F4D03F", lw=1.5, label="Forward to output"),
         Line2D([0], [0], color="#777777", lw=1.5, linestyle="--", label="Recurrent"),
     ]
-    ax.legend(handles=legend_elements, loc="lower right", fontsize=8, framealpha=0.95, edgecolor="#CCCCCC")
+    ax.legend(
+        handles=legend_elements,
+        loc="lower left",
+        bbox_to_anchor=(0.95, 0.02),        #图例距离：第一个数是横向距离
+        borderaxespad=0.0,
+        fontsize=8,
+        framealpha=0.95,
+        edgecolor="#CCCCCC",
+    )
 
     output_file = os.path.join(output_dir, output_name)
     finalize_figure(fig, output_file)
@@ -629,7 +643,7 @@ def visualize_evolution(
     output_dir: Optional[str] = None,
     max_generations: Optional[int] = None,
 ):
-    task_dir = resolve_task_dir(task_dir)
+    task_dir = resolve_task_dir(task_dir, require_kind=PURE_NEAT_BRANCH)
     output_dir = ensure_output_dir(task_dir, "genome_visualization") if output_dir is None else output_dir
     checkpoint_paths = get_checkpoint_paths(task_dir)
     if not checkpoint_paths:
@@ -678,7 +692,7 @@ def visualize_evolution(
     fig, axes = plt.subplots(n_rows, n_cols, figsize=(4.1 * n_cols, 4.0 * n_rows))
     axes = np.array(axes, dtype=object).reshape(n_rows, n_cols)
 
-    fig.suptitle(f"Network Evolution: {os.path.basename(task_dir)}", fontsize=14, fontweight="bold")
+    fig.suptitle(f"Network Evolution: {format_result_dir_label(task_dir)}", fontsize=14, fontweight="bold")
 
     for idx, entry in enumerate(selected_entries):
         row = idx // n_cols
@@ -725,25 +739,33 @@ def visualize_evolution(
 
 def main():
     parser = argparse.ArgumentParser(description="Visualize NEAT genomes and topology evolution.")
-    parser.add_argument("task_dir", help="Result directory name under results/ or an absolute path")
+    parser.add_argument("task_dir", help="Task root, pure_neat branch directory, or absolute path")
+    parser.add_argument(
+        "--branch",
+        choices=(PURE_NEAT_BRANCH,),
+        default=None,
+        help="Branch under a task root. Genome visualization currently requires pure_neat.",
+    )
     parser.add_argument("-g", "--generation", type=int, default=None, help="Generation to visualize, default: global best")
     parser.add_argument("--evolution", action="store_true", help="Render topology evolution across checkpoints")
     parser.add_argument("--interval", type=int, default=25, help="Generation interval for evolution view")
     parser.add_argument("--all", action="store_true", help="Generate single genome and evolution plots")
+    parser.add_argument("--output-dir", help="Directory to save plots to")
     args = parser.parse_args()
 
-    task_dir = resolve_task_dir(args.task_dir)
+    task_dir = resolve_task_dir(args.task_dir, branch=args.branch, require_kind=PURE_NEAT_BRANCH)
     print(f"[GenomeVis]\ntask_dir: {task_dir}")
 
     if args.all:
-        visualize_single_genome(task_dir, args.generation)
-        visualize_evolution(task_dir, args.interval)
+        visualize_single_genome(task_dir, args.generation, output_dir=args.output_dir)
+        visualize_evolution(task_dir, args.interval, output_dir=args.output_dir)
     elif args.evolution:
-        visualize_evolution(task_dir, args.interval)
+        visualize_evolution(task_dir, args.interval, output_dir=args.output_dir)
     else:
-        visualize_single_genome(task_dir, args.generation)
+        visualize_single_genome(task_dir, args.generation, output_dir=args.output_dir)
 
-    print(f"output_dir: {os.path.join(task_dir, 'genome_visualization')}")
+    output_dir = args.output_dir if args.output_dir is not None else os.path.join(task_dir, "genome_visualization")
+    print(f"output_dir: {output_dir}")
 
 
 if __name__ == "__main__":

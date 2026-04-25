@@ -65,6 +65,32 @@ def generate_results_dir_name(scenario_name: str, algorithm_name: str, task_conf
     return f"results/{scenario_name}_{algorithm_name}_{params_str}"
 
 
+def generate_task_results_root_name(scenario_name: str, task_config) -> str:
+    from dataclasses import fields, is_dataclass
+
+    task_params = []
+    if is_dataclass(task_config):
+        for field in fields(task_config):
+            task_params.append(str(getattr(task_config, field.name)))
+    else:
+        for key in sorted(vars(task_config).keys()):
+            task_params.append(str(getattr(task_config, key)))
+
+    params_str = "_".join(task_params)
+    return f"results/{scenario_name}_{params_str}"
+
+
+def generate_task_branch_results_dir_name(
+    scenario_name: str,
+    branch_name: str,
+    task_config,
+) -> str:
+    return os.path.join(
+        generate_task_results_root_name(scenario_name, task_config),
+        branch_name,
+    )
+
+
 def load_neat_config_with_substitution(cfg_path, num_inputs, num_outputs, output_path=None):
     with open(cfg_path, "r") as f:
         content = f.read()

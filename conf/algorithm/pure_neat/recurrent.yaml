@@ -1,0 +1,11 @@
+# @package algorithm
+defaults:
+  - recurrent_config
+  - _self_
+
+branch: pure_neat
+name: recurrent
+neat_config_path: conf/algorithm/neat_config/recurrent.cfg
+n_internal_steps: 1
+use_current_activs: False
+prune_empty: False

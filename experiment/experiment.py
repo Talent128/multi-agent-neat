@@ -24,6 +24,7 @@ from .runtime import (
     ensure_results_layout,
     find_latest_checkpoint,
     generate_results_dir_name,
+    generate_task_branch_results_dir_name,
     get_action_bounds,
     load_global_best_package,
     load_global_best_target,
@@ -33,6 +34,7 @@ from .runtime import (
     restore_population_checkpoint,
 )
 from .better_pop import better_Population
+from .utils import seed_everything
 
 
 @dataclass
@@ -84,6 +86,7 @@ class Experiment:
         self.task_config = task_config
         self.config = experiment_config
         self.seed = seed
+        seed_everything(self.seed)
 
         self.just_restored = False  # 记录是否刚从检查点恢复
 
@@ -102,8 +105,9 @@ class Experiment:
 
     def _init_results_layout(self):
         if self.config.results_dir is None:
-            self.config.results_dir = generate_results_dir_name(
-                self.scenario_name, self.algorithm_name, self.task_config
+            branch_name = getattr(self.algorithm_config, "branch", "pure_neat")
+            self.config.results_dir = generate_task_branch_results_dir_name(
+                self.scenario_name, branch_name, self.task_config
             )
 
         paths = ensure_results_layout(self.config.results_dir)
@@ -111,6 +115,10 @@ class Experiment:
         self.log_dir = paths.log_dir
         self.video_dir = paths.video_dir
         self.global_best_package_path = paths.global_best_package_path
+
+    @property
+    def results_dir(self) -> str:
+        return self.config.results_dir
 
     def _init_space_dimensions(self):
         test_env = self._make_env(num_envs=1)

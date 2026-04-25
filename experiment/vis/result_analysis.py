@@ -21,7 +21,9 @@ if __package__ in (None, ""):
     project_root = Path(__file__).resolve().parents[2]
     sys.path.insert(0, str(project_root))
     from experiment.vis.data import (
+        PURE_NEAT_BRANCH,
         ensure_output_dir,
+        format_result_dir_label,
         load_global_best_genome,
         load_run_history,
         load_species_history,
@@ -30,7 +32,9 @@ if __package__ in (None, ""):
     from experiment.vis.plotting import finalize_figure, plot_band, plot_line, style_axis
 else:
     from .data import (
+        PURE_NEAT_BRANCH,
         ensure_output_dir,
+        format_result_dir_label,
         load_global_best_genome,
         load_run_history,
         load_species_history,
@@ -169,7 +173,7 @@ def _build_analysis_summary(
         }
 
     summary = {
-        "config": os.path.basename(task_dir),
+        "config": format_result_dir_label(task_dir),
         "task_dir": task_dir,
         "total_generations": total_generations,
         "global_best_generation": _to_optional_int(best_generation),
@@ -443,7 +447,7 @@ def plot_run_dashboard(task_dir: str, output_dir: str | None = None):
     best_generation = _resolve_best_generation(task_dir)
 
     fig, axes = plt.subplots(2, 2, figsize=(13, 8))
-    task_name = os.path.basename(task_dir)
+    task_name = format_result_dir_label(task_dir)
     fig.suptitle(f"Run Dashboard: {task_name}", fontsize=14, fontweight="bold")
 
     _draw_population_axis(axes[0, 0], population_data, best_generation=best_generation)
@@ -462,7 +466,13 @@ def plot_run_dashboard(task_dir: str, output_dir: str | None = None):
 
 def main():
     parser = argparse.ArgumentParser(description="Result analysis tools for multi-agent NEAT runs.")
-    parser.add_argument("task_dir", help="Result directory or name under results/")
+    parser.add_argument("task_dir", help="Task root, pure_neat branch directory, or absolute path")
+    parser.add_argument(
+        "--branch",
+        choices=(PURE_NEAT_BRANCH,),
+        default=None,
+        help="Branch under a task root. Currently supported: pure_neat.",
+    )
     parser.add_argument("--dashboard", action="store_true", help="Plot a single-run dashboard")
     parser.add_argument("--panels", action="store_true", help="Plot all four dashboard panels as standalone figures")
     parser.add_argument("--population-panel", action="store_true", help="Plot the population evolution panel only")
@@ -472,7 +482,7 @@ def main():
     parser.add_argument("--output-dir", help="Directory to save plots to")
     args = parser.parse_args()
 
-    task_dir = resolve_task_dir(args.task_dir)
+    task_dir = resolve_task_dir(args.task_dir, branch=args.branch)
 
     panel_mode = (
         args.panels

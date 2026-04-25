@@ -1,0 +1,5 @@
+# @package _global_
+defaults:
+  - /experiment: pure_neat
+  - /algorithm/pure_neat: recurrent
+  - _self_

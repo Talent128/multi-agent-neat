@@ -1,0 +1,251 @@
+{
+  "config": "transport_400_5_1_0.15_0.15_15.0",
+  "task_dir": "/home/zjc/multi-agent-neat/results/transport_400_5_1_0.15_0.15_15.0/pure_neat",
+  "total_generations": 200,
+  "global_best_generation": 197,
+  "population": {
+    "fitness_avg": {
+      "label": "fitness_avg",
+      "initial": {
+        "generation": 0,
+        "value": -0.11048165795425302
+      },
+      "final": {
+        "generation": 199,
+        "value": 21.883953932061793
+      },
+      "min": {
+        "generation": 0,
+        "value": -0.11048165795425302
+      },
+      "max": {
+        "generation": 198,
+        "value": 26.22846524067134
+      }
+    },
+    "fitness_std": {
+      "label": "fitness_std",
+      "initial": {
+        "generation": 0,
+        "value": 0.26636064711817875
+      },
+      "final": {
+        "generation": 199,
+        "value": 33.14286696488914
+      },
+      "min": {
+        "generation": 0,
+        "value": 0.26636064711817875
+      },
+      "max": {
+        "generation": 197,
+        "value": 34.5613663370767
+      }
+    },
+    "fitness_best": {
+      "label": "fitness_best",
+      "initial": {
+        "generation": 0,
+        "value": 0.7211496233940125
+      },
+      "final": {
+        "generation": 199,
+        "value": 75.46753692626953
+      },
+      "min": {
+        "generation": 0,
+        "value": 0.7211496233940125
+      },
+      "max": {
+        "generation": 197,
+        "value": 82.44087982177734
+      }
+    },
+    "avg_improvement": 21.994435590016046,
+    "best_improvement": 74.74638730287552
+  },
+  "evaluation": {
+    "best_mean": {
+      "label": "best_mean",
+      "initial": {
+        "generation": 0,
+        "value": 0.7211496233940125
+      },
+      "final": {
+        "generation": 199,
+        "value": 75.46753692626953
+      },
+      "min": {
+        "generation": 0,
+        "value": 0.7211496233940125
+      },
+      "max": {
+        "generation": 197,
+        "value": 82.44087982177734
+      }
+    },
+    "best_std": {
+      "label": "best_std",
+      "initial": {
+        "generation": 0,
+        "value": 4.3968939781188965
+      },
+      "final": {
+        "generation": 199,
+        "value": 38.97707748413086
+      },
+      "min": {
+        "generation": 1,
+        "value": 1.9373219013214111
+      },
+      "max": {
+        "generation": 181,
+        "value": 40.39772415161133
+      }
+    },
+    "best_min": {
+      "label": "best_min",
+      "initial": {
+        "generation": 0,
+        "value": -0.9111175537109375
+      },
+      "final": {
+        "generation": 199,
+        "value": 3.2605514526367188
+      },
+      "min": {
+        "generation": 49,
+        "value": -107.1893539428711
+      },
+      "max": {
+        "generation": 197,
+        "value": 11.317001342773438
+      }
+    },
+    "best_max": {
+      "label": "best_max",
+      "initial": {
+        "generation": 0,
+        "value": 37.41280746459961
+      },
+      "final": {
+        "generation": 199,
+        "value": 139.07167053222656
+      },
+      "min": {
+        "generation": 1,
+        "value": 8.92950439453125
+      },
+      "max": {
+        "generation": 161,
+        "value": 169.2046661376953
+      }
+    }
+  },
+  "complexity": {
+    "n_neurons_best": {
+      "label": "n_neurons_best",
+      "initial": {
+        "generation": 0,
+        "value": 2.0
+      },
+      "final": {
+        "generation": 199,
+        "value": 8.0
+      },
+      "min": {
+        "generation": 0,
+        "value": 2.0
+      },
+      "max": {
+        "generation": 154,
+        "value": 10.0
+      }
+    },
+    "n_conns_best": {
+      "label": "n_conns_best",
+      "initial": {
+        "generation": 0,
+        "value": 24.0
+      },
+      "final": {
+        "generation": 199,
+        "value": 20.0
+      },
+      "min": {
+        "generation": 147,
+        "value": 11.0
+      },
+      "max": {
+        "generation": 28,
+        "value": 30.0
+      }
+    }
+  },
+  "species": {
+    "logged_n_species": {
+      "label": "n_species",
+      "initial": {
+        "generation": 0,
+        "value": 1.0
+      },
+      "final": {
+        "generation": 199,
+        "value": 3.0
+      },
+      "min": {
+        "generation": 0,
+        "value": 1.0
+      },
+      "max": {
+        "generation": 93,
+        "value": 3.0
+      }
+    },
+    "tracked_species_ids": [
+      1,
+      2,
+      3
+    ],
+    "n_species_final": 3,
+    "n_species_peak": 3,
+    "final_sizes": {
+      "1": 76,
+      "2": 97,
+      "3": 77
+    },
+    "largest_species": {
+      "species_id": 1,
+      "generation": 0,
+      "size": 250
+    }
+  },
+  "runtime": {
+    "time_elapsed": {
+      "label": "time_elapsed",
+      "initial": {
+        "generation": 0,
+        "value": 3.8978829383850098
+      },
+      "final": {
+        "generation": 199,
+        "value": 4.24565052986145
+      },
+      "min": {
+        "generation": 0,
+        "value": 3.8978829383850098
+      },
+      "max": {
+        "generation": 197,
+        "value": 8.23921012878418
+      }
+    },
+    "total_recorded_seconds": 941.5913670063019
+  },
+  "outputs": {
+    "plots": [
+      "analysis_dashboard.png"
+    ],
+    "summary_json": "analysis_summary.json"
+  }
+}

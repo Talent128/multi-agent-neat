@@ -1,0 +1,17 @@
+# @package algorithm
+defaults:
+  # 注册 ea_rl 算法侧 schema，字段定义见 ea_rl/config.py::EaRlAlgorithmConfig。
+  - evo_rl_config
+  - _self_
+
+# 算法分支标识。hydra_config.py 依赖该字段选择 ea_rl 占位实验。
+branch: ea_rl
+
+# 分支内算法名。保留 evo_rl 标识，后续重构可沿用或替换。
+name: evo_td3
+
+# 当前状态：入口保留，训练实现已移除。
+status: placeholder
+
+# 运行 ea_rl 分支时输出的占位提示信息。
+message: "ea_rl branch implementation has been removed pending rewrite."

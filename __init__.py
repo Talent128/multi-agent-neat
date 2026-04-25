@@ -8,13 +8,17 @@ if _has_hydra:
     from hydra.core.config_store import ConfigStore
 
     from experiment.experiment import ExperimentConfig
+    from ea_rl.config import EaRlAlgorithmConfig, EaRlExperimentConfig
     from pytorch_neat.config import RecurrentNetConfig
 
     cs = ConfigStore.instance()
     # Algorithm schemas
     cs.store(group="algorithm", name="recurrent_config", node=RecurrentNetConfig)
+    cs.store(group="algorithm/pure_neat", name="recurrent_config", node=RecurrentNetConfig)
+    cs.store(group="algorithm/ea_rl", name="evo_rl_config", node=EaRlAlgorithmConfig)
     # Experiment schema
     cs.store(group="experiment", name="experiment_config", node=ExperimentConfig)
+    cs.store(group="experiment", name="ea_rl_experiment_config", node=EaRlExperimentConfig)
 
     def _register_vmas_tasks():
         """Auto-register VMAS task TaskConfig dataclasses for Hydra."""

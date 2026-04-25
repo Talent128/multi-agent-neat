@@ -19,18 +19,90 @@ from experiment.runtime import (
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 RESULTS_ROOT = PROJECT_ROOT / "results"
+PURE_NEAT_BRANCH = "pure_neat"
+EA_RL_BRANCH = "ea_rl"
+DEFAULT_BRANCH = PURE_NEAT_BRANCH
+BRANCH_NAMES = (PURE_NEAT_BRANCH, EA_RL_BRANCH)
 
 
-def resolve_task_dir(task_dir: str) -> str:
+def _existing_path(task_dir: str) -> Path | None:
+    path = Path(task_dir).expanduser()
+    candidates = [path] if path.is_absolute() else [
+        Path.cwd() / path,
+        PROJECT_ROOT / path,
+        RESULTS_ROOT / path,
+    ]
+
+    seen = set()
+    for candidate in candidates:
+        resolved = candidate.resolve(strict=False)
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        if candidate.exists():
+            return candidate.resolve()
+
+    return None
+
+
+def has_pure_neat_artifacts(path: str | Path) -> bool:
+    path = Path(path)
+    return (
+        (path / "logs" / "log.json").exists()
+        or (path / "logs" / "best_log.json").exists()
+        or (path / GLOBAL_BEST_PACKAGE_NAME).exists()
+        or (path / "recurrent.cfg").exists()
+    )
+
+
+def _validate_pure_neat_dir(path: Path, require_kind: str | None) -> Path:
+    if require_kind in (None, PURE_NEAT_BRANCH) and has_pure_neat_artifacts(path):
+        return path
+    if require_kind is None:
+        raise FileNotFoundError(f"Result directory has no pure_neat artifacts: {path}")
+    raise FileNotFoundError(f"Result directory does not contain {require_kind} artifacts: {path}")
+
+
+def resolve_task_dir(
+    task_dir: str,
+    *,
+    branch: str | None = None,
+    require_kind: str | None = None,
+) -> str:
+    """Resolve current results/<task_params>/<branch> paths.
+
+    A task root such as results/transport_400_5_1_0.15_0.15_15.0 resolves
+    to its pure_neat child unless a branch is specified explicitly.
+    """
+    base_path = _existing_path(task_dir)
+    if base_path is None:
+        raise FileNotFoundError(f"Result directory not found: {task_dir}")
+
+    if branch is not None:
+        if branch not in BRANCH_NAMES:
+            raise ValueError(f"Unknown result branch: {branch}")
+        branch_path = base_path if base_path.name == branch else base_path / branch
+        if not branch_path.exists():
+            raise FileNotFoundError(f"Result branch not found: {branch_path}")
+        return str(_validate_pure_neat_dir(branch_path.resolve(), require_kind))
+
+    if base_path.name == PURE_NEAT_BRANCH:
+        return str(_validate_pure_neat_dir(base_path, require_kind))
+
+    branch_path = base_path / DEFAULT_BRANCH
+    if branch_path.exists():
+        return str(_validate_pure_neat_dir(branch_path.resolve(), require_kind))
+
+    raise FileNotFoundError(
+        f"Expected current result layout at {base_path}/{DEFAULT_BRANCH}"
+    )
+
+
+def format_result_dir_label(task_dir: str | Path) -> str:
     path = Path(task_dir)
-    if path.exists():
-        return str(path.resolve())
-
-    candidate = RESULTS_ROOT / task_dir
-    if candidate.exists():
-        return str(candidate.resolve())
-
-    raise FileNotFoundError(f"Result directory not found: {task_dir}")
+    if path.name in BRANCH_NAMES and path.parent.name != "results":
+        return path.parent.name
+    return path.name
 
 
 def ensure_output_dir(task_dir: str, folder_name: str) -> str:
@@ -63,14 +135,14 @@ def merge_history_by_generation(*record_groups: list[dict]) -> list[dict]:
 
 
 def load_run_history(task_dir: str) -> list[dict]:
-    task_dir = resolve_task_dir(task_dir)
+    task_dir = resolve_task_dir(task_dir, require_kind=PURE_NEAT_BRANCH)
     log_file = os.path.join(task_dir, "logs", "log.json")
     best_log_file = os.path.join(task_dir, "logs", "best_log.json")
     return merge_history_by_generation(read_jsonl(log_file), read_jsonl(best_log_file))
 
 
 def get_checkpoint_paths(task_dir: str) -> list[str]:
-    checkpoint_dir = os.path.join(resolve_task_dir(task_dir), "checkpoints")
+    checkpoint_dir = os.path.join(resolve_task_dir(task_dir, require_kind=PURE_NEAT_BRANCH), "checkpoints")
     return [os.path.join(checkpoint_dir, filename) for filename in list_checkpoints(checkpoint_dir)]
 
 
@@ -109,7 +181,7 @@ def load_best_genome_from_generation(task_dir: str, generation: int):
 
 
 def get_global_best_package_path(task_dir: str) -> str:
-    return os.path.join(resolve_task_dir(task_dir), GLOBAL_BEST_PACKAGE_NAME)
+    return os.path.join(resolve_task_dir(task_dir, require_kind=PURE_NEAT_BRANCH), GLOBAL_BEST_PACKAGE_NAME)
 
 
 def load_global_best_genome(task_dir: str):
@@ -127,7 +199,7 @@ def load_global_best_genome(task_dir: str):
 
 @lru_cache(maxsize=16)
 def load_species_history(task_dir: str):
-    task_dir = resolve_task_dir(task_dir)
+    task_dir = resolve_task_dir(task_dir, require_kind=PURE_NEAT_BRANCH)
     checkpoint_paths = get_checkpoint_paths(task_dir)
     if not checkpoint_paths:
         return np.array([], dtype=int), np.zeros((0, 0), dtype=float), []

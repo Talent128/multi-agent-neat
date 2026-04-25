@@ -26,7 +26,12 @@ def main(cfg: DictConfig) -> None:
     # 获取运行时选择
     hydra_choices = HydraConfig.get().runtime.choices
     task_name = hydra_choices.task
-    algorithm_name = hydra_choices.algorithm
+    algorithm_name = (
+        getattr(cfg.algorithm, "name", None)
+        or hydra_choices.get("algorithm")
+        or hydra_choices.get("algorithm/pure_neat")
+        or hydra_choices.get("algorithm/ea_rl")
+    )
 
     print(f"\nAlgorithm: {algorithm_name}, Task: {task_name}")
     print("\nLoaded config:\n")
@@ -42,7 +47,7 @@ def main(cfg: DictConfig) -> None:
     hydra_cfg = HydraConfig.get()
     hydra_output_dir = hydra_cfg.runtime.output_dir
     hydra_dir = os.path.join(hydra_output_dir, '.hydra')
-    target_hydra_dir = os.path.join(experiment.config.results_dir, '.hydra')
+    target_hydra_dir = os.path.join(experiment.results_dir, '.hydra')
     
     if os.path.exists(hydra_dir) and not os.path.exists(target_hydra_dir):
         shutil.copytree(hydra_dir, target_hydra_dir)

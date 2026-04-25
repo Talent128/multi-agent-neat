@@ -1,31 +1,64 @@
 # `experiment/vis` 使用说明
 
-本目录提供两类工具：
+本目录提供 pure NEAT 训练结果的可视化工具：
 
-- 网络结构可视化：查看单个基因组拓扑、进化过程
-- 结果分析：查看单次训练总览、四张子图独立导出
+- 网络结构可视化：查看全局最优基因组、指定代基因组、网络拓扑演化
+- 结果分析：查看单次训练 dashboard，以及四张分析子图的独立导出
 
-默认假设结果目录位于项目根目录下的 `results/`。
+## 当前结果目录
 
-## 目录结构
+当前训练结果使用分支目录：
+
+```text
+results/<task_params>/<branch>
+```
+
+例如当前仓库中的 transport 结果：
+
+```text
+results/transport_400_5_1_0.15_0.15_15.0/
+  pure_neat/
+    checkpoints/
+    logs/log.json
+    logs/best_log.json
+    global_best_genome.pkl
+    recurrent.cfg
+  ea_rl/
+    checkpoints/
+    logs/metrics.jsonl
+    logs/eval.jsonl
+    best_actor.pt
+```
+
+本轮适配覆盖 `pure_neat`。下面这些输入会解析到同一个 pure NEAT 结果目录：
+
+```bash
+python experiment/vis/analyze_results.py transport_400_5_1_0.15_0.15_15.0
+python experiment/vis/analyze_results.py results/transport_400_5_1_0.15_0.15_15.0
+python experiment/vis/analyze_results.py results/transport_400_5_1_0.15_0.15_15.0/pure_neat
+python experiment/vis/analyze_results.py /home/zjc/multi-agent-neat/results/transport_400_5_1_0.15_0.15_15.0/pure_neat
+```
+
+如果传入任务根目录 `results/<task_params>`，工具会默认选择 `pure_neat` 子目录。也可以显式写：
+
+```bash
+python experiment/vis/analyze_results.py transport_400_5_1_0.15_0.15_15.0 --branch pure_neat
+```
+
+## 脚本说明
 
 - `visualize_genome.py`
   - 网络结构可视化 CLI
-  - 支持单个基因组、进化过程
+  - 读取 `global_best_genome.pkl`、`checkpoints/neat-checkpoint-*`、`recurrent.cfg`
 - `result_analysis.py`
   - 结果分析 CLI 主实现
-  - 支持单次训练总览、四张子图独立导出
+  - 读取 `logs/log.json`、`logs/best_log.json` 和 checkpoint 中的物种信息
 - `analyze_results.py`
   - `result_analysis.py` 的薄包装入口
-  - 直接执行它即可，不需要手动 `python -m`
 - `data.py`
-  - 数据读取辅助
-  - 负责读取 `checkpoint`、`global_best_genome.pkl`、`log.json`、`best_log.json`
+  - 统一解析当前 `results/<task_params>/pure_neat` 目录
 - `plotting.py`
   - 基础绘图辅助
-  - 提供折线、区间带、分位数、直方图等基础图元
-- `__init__.py`
-  - 统一导出常用 API
 
 ## 环境要求
 
@@ -42,156 +75,163 @@ conda activate NEAT-ROBO
 - `networkx`
 - `neat-python`
 
-## 结果目录输入规则
-
-这两个 CLI 都支持两种输入方式：
-
-1. 直接给绝对路径
-2. 只给 `results/` 下的目录名
-
-例如这两种等价：
-
-```bash
-python experiment/vis/visualize_genome.py transport_recurrent_410_5_1_0.15_0.15_15.0
-python experiment/vis/visualize_genome.py /home/zjc/multi-agent-neat/results/transport_recurrent_410_5_1_0.15_0.15_15.0
-```
-
 ## 1. 网络结构可视化
 
 入口：
 
 ```bash
-python experiment/vis/visualize_genome.py <result_dir> [options]
+python experiment/vis/visualize_genome.py <task_params_or_pure_neat_dir> [options]
 ```
 
-### 1.1 默认：显示全局最优基因组
+### 1.1 默认：全局最优基因组
 
 ```bash
-python experiment/vis/visualize_genome.py transport_recurrent_410_5_1_0.15_0.15_15.0
+python experiment/vis/visualize_genome.py transport_400_5_1_0.15_0.15_15.0
 ```
 
 输出：
 
-- `results/<result_dir>/genome_visualization/genome_global_best.png`
+```text
+results/transport_400_5_1_0.15_0.15_15.0/pure_neat/genome_visualization/genome_global_best.png
+```
 
-### 1.2 指定某一代的最佳基因组
+### 1.2 指定某一代
 
 ```bash
-python experiment/vis/visualize_genome.py transport_recurrent_410_5_1_0.15_0.15_15.0 -g 50
+python experiment/vis/visualize_genome.py transport_400_5_1_0.15_0.15_15.0 -g 50
 ```
 
 输出：
 
-- `results/<result_dir>/genome_visualization/genome_gen50.png`
+```text
+results/transport_400_5_1_0.15_0.15_15.0/pure_neat/genome_visualization/genome_gen50.png
+```
 
 如果该代不存在，会自动回退到最接近的 checkpoint。
 
-### 1.3 展示网络进化过程
+### 1.3 网络演化图
 
 ```bash
-python experiment/vis/visualize_genome.py transport_recurrent_410_5_1_0.15_0.15_15.0 --evolution --interval 25
+python experiment/vis/visualize_genome.py \
+  transport_400_5_1_0.15_0.15_15.0 \
+  --evolution \
+  --interval 25
 ```
 
 输出：
 
-- `results/<result_dir>/genome_visualization/network_evolution.png`
-
-说明：
-
-- `--interval` 控制每隔多少代抽样一个 checkpoint
-- 总子图过多时会自动稀疏采样
+```text
+results/transport_400_5_1_0.15_0.15_15.0/pure_neat/genome_visualization/network_evolution.png
+```
 
 ### 1.4 一次生成全部网络图
 
 ```bash
-python experiment/vis/visualize_genome.py transport_recurrent_410_5_1_0.15_0.15_15.0 --all
+python experiment/vis/visualize_genome.py transport_400_5_1_0.15_0.15_15.0 --all
 ```
 
-会生成：
-
-- `genome_global_best.png` 或 `genome_gen*.png`
-- `network_evolution.png`
-
-### 1.5 可选参数
+### 1.5 保存到自定义目录
 
 ```bash
-python experiment/vis/visualize_genome.py -h
+python experiment/vis/visualize_genome.py \
+  transport_400_5_1_0.15_0.15_15.0 \
+  --output-dir /tmp/neat_genome_vis
 ```
-
-主要参数：
-
-- `-g, --generation`
-  - 指定要展示的代数
-- `--evolution`
-  - 绘制多代网络进化图
-- `--interval`
-  - 进化图抽样间隔
-- `--all`
-  - 一次生成所有网络相关图
 
 ## 2. 结果分析
 
 推荐入口：
 
 ```bash
-python experiment/vis/analyze_results.py <args>
+python experiment/vis/analyze_results.py <task_params_or_pure_neat_dir> [options]
 ```
 
-`analyze_results.py` 只是转调 `result_analysis.py`，两者参数完全一致。
-
-### 2.1 单次训练：Dashboard
+### 2.1 单次训练 dashboard
 
 ```bash
-python experiment/vis/analyze_results.py transport_recurrent_410_5_1_0.15_0.15_15.0 --dashboard
+python experiment/vis/analyze_results.py transport_400_5_1_0.15_0.15_15.0 --dashboard
 ```
 
 输出：
 
-- `results/<result_dir>/result_analysis/analysis_dashboard.png`
-- `results/<result_dir>/result_analysis/analysis_summary.json`
+```text
+results/transport_400_5_1_0.15_0.15_15.0/pure_neat/result_analysis/analysis_dashboard.png
+results/transport_400_5_1_0.15_0.15_15.0/pure_neat/result_analysis/analysis_summary.json
+```
 
-内容包括：
+dashboard 包括：
 
-- 种群进化过程（均值 + 标准差阴影 + 每代最佳）
-- 最佳个体评估区间
-- 网络复杂度变化
-- 物种分布堆叠图
+- 种群适应度均值、标准差和每代最佳个体
+- 最佳个体评估均值、标准差、最小值、最大值
+- 最优网络复杂度变化
+- checkpoint 中记录的物种分布
 
-### 2.2 单次训练：独立导出四张子图
-
-一次导出全部四张：
+### 2.2 独立导出四张子图
 
 ```bash
 python experiment/vis/analyze_results.py \
-  transport_recurrent_410_5_1_0.15_0.15_15.0 \
+  transport_400_5_1_0.15_0.15_15.0 \
   --panels
 ```
 
 输出：
 
-- `results/<result_dir>/result_analysis/population_evolution.png`
-- `results/<result_dir>/result_analysis/evaluation_spread.png`
-- `results/<result_dir>/result_analysis/complexity_panel.png`
-- `results/<result_dir>/result_analysis/species_distribution.png`
-- `results/<result_dir>/result_analysis/analysis_summary.json`
+```text
+population_evolution.png
+evaluation_spread.png
+complexity_panel.png
+species_distribution.png
+analysis_summary.json
+```
 
 只导出某一张：
 
 ```bash
-python experiment/vis/analyze_results.py <result_dir> --population-panel
-python experiment/vis/analyze_results.py <result_dir> --spread-panel
-python experiment/vis/analyze_results.py <result_dir> --complexity-panel
-python experiment/vis/analyze_results.py <result_dir> --species-panel
+python experiment/vis/analyze_results.py <task_params_or_pure_neat_dir> --population-panel
+python experiment/vis/analyze_results.py <task_params_or_pure_neat_dir> --spread-panel
+python experiment/vis/analyze_results.py <task_params_or_pure_neat_dir> --complexity-panel
+python experiment/vis/analyze_results.py <task_params_or_pure_neat_dir> --species-panel
 ```
 
-### 2.3 不显式指定模式时的默认行为
+不显式指定模式时，默认执行 `--dashboard`。
 
-- 如果不显式指定模式：
-  - 默认执行 `--dashboard`
+### 2.3 保存到自定义目录
 
-### 2.4 常用指标
+```bash
+python experiment/vis/analyze_results.py \
+  transport_400_5_1_0.15_0.15_15.0 \
+  --dashboard \
+  --output-dir /tmp/neat_result_analysis
+```
 
-这些指标来自 `log.json` 与 `best_log.json`：
+## 3. Python API
+
+```python
+from experiment.vis import visualize_single_genome, visualize_evolution
+
+visualize_single_genome("transport_400_5_1_0.15_0.15_15.0")
+visualize_evolution("transport_400_5_1_0.15_0.15_15.0", interval=20)
+```
+
+```python
+from experiment.vis import (
+    plot_complexity_panel,
+    plot_evaluation_spread_panel,
+    plot_population_evolution_panel,
+    plot_species_distribution_panel,
+    plot_run_dashboard,
+)
+
+plot_run_dashboard("transport_400_5_1_0.15_0.15_15.0")
+plot_population_evolution_panel("transport_400_5_1_0.15_0.15_15.0")
+plot_evaluation_spread_panel("transport_400_5_1_0.15_0.15_15.0")
+plot_complexity_panel("transport_400_5_1_0.15_0.15_15.0")
+plot_species_distribution_panel("transport_400_5_1_0.15_0.15_15.0")
+```
+
+## 4. 常用指标
+
+这些指标来自 `pure_neat/logs/log.json` 与 `pure_neat/logs/best_log.json`：
 
 - `fitness_avg`
 - `fitness_std`
@@ -206,94 +246,24 @@ python experiment/vis/analyze_results.py <result_dir> --species-panel
 - `n_neurons_best`
 - `n_conns_best`
 
-`analysis_summary.json` 会额外记录这些图对应的关键摘要值，包括：
+`analysis_summary.json` 会额外记录：
 
 - 总代数与全局最优代数
-- 种群适应度初值、末值、最值与提升量
-- `best_mean/std/min/max` 的摘要
-- 最优个体复杂度摘要
-- 物种数量与最终物种规模分布
-- 已生成的分析图文件列表
+- 种群适应度初值、末值、最值和提升量
+- 最佳个体评估指标摘要
+- 最优网络复杂度摘要
+- 物种数量和最终物种规模分布
+- 已生成的图文件列表
 
-## 3. Python API 用法
+## 5. 注意事项
 
-### 3.1 网络图 API
-
-```python
-from experiment.vis import visualize_single_genome, visualize_evolution
-
-visualize_single_genome("transport_recurrent_410_5_1_0.15_0.15_15.0")
-visualize_evolution("transport_recurrent_410_5_1_0.15_0.15_15.0", interval=20)
-```
-
-### 3.2 结果分析 API
-
-```python
-from experiment.vis import (
-    plot_complexity_panel,
-    plot_evaluation_spread_panel,
-    plot_population_evolution_panel,
-    plot_species_distribution_panel,
-    plot_run_dashboard,
-)
-
-plot_run_dashboard("transport_recurrent_410_5_1_0.15_0.15_15.0")
-plot_population_evolution_panel("transport_recurrent_410_5_1_0.15_0.15_15.0")
-plot_evaluation_spread_panel("transport_recurrent_410_5_1_0.15_0.15_15.0")
-plot_complexity_panel("transport_recurrent_410_5_1_0.15_0.15_15.0")
-plot_species_distribution_panel("transport_recurrent_410_5_1_0.15_0.15_15.0")
-```
-
-## 4. 内部辅助模块
-
-这些模块通常不给终端直接调用，但在扩展新可视化时会用到。
-
-### `data.py`
-
-常用函数：
-
-- `resolve_task_dir(task_dir)`
-- `load_run_history(task_dir)`
-- `load_species_history(task_dir)`
-- `get_checkpoint_paths(task_dir)`
-- `load_best_genome_from_generation(task_dir, generation)`
-- `load_global_best_genome(task_dir)`
-
-### `plotting.py`
-
-常用函数：
-
-- `plot_line(...)`
-- `plot_band(...)`
-- `style_axis(...)`
-- `finalize_figure(...)`
-
-## 5. 推荐工作流
-
-### 看单次训练效果
-
-```bash
-python experiment/vis/visualize_genome.py <result_dir>
-python experiment/vis/analyze_results.py <result_dir> --dashboard
-```
-
-### 看结构如何演化
-
-```bash
-python experiment/vis/visualize_genome.py <result_dir> --evolution --interval 20
-```
-
-## 6. 注意事项
-
+- 当前适配目标是 `pure_neat`，`ea_rl` 的 `metrics.jsonl` / `eval.jsonl` 不在本工具本轮绘图范围内
 - `log.json` 与 `best_log.json` 是 JSONL，不是单个 JSON 对象
 - 默认全局最优依赖 `global_best_genome.pkl`
-- 如果 checkpoint 太多，`--evolution` 会自动下采样
-- 如果想集中保存单次训练分析图，可使用 `--output-dir`
-- `analysis_summary.json` 是基于当前结果目录重新汇总出来的摘要，不会替代原始 `log.json` / `best_log.json`
+- `--evolution` 在 checkpoint 很多时会自动稀疏采样
+- 旧单层结果目录不再兼容；请传入 `results/<task_params>` 或 `results/<task_params>/pure_neat`
 
-## 7. 快速检查
-
-查看帮助：
+## 6. 快速检查
 
 ```bash
 python experiment/vis/visualize_genome.py -h

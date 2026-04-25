@@ -1,0 +1,41 @@
+defaults:
+  # 注册 ea_rl 实验侧 schema，字段定义见 ea_rl/config.py::EaRlExperimentConfig。
+  - ea_rl_experiment_config
+  - _self_
+
+# 预留设备字段。当前 ea_rl 仅保留占位入口，不再执行训练。
+device: "cuda:3"
+
+# 预留环境动作空间字段，后续重构可继续沿用。
+continuous_actions: True
+
+# 结果目录。null 表示自动生成：
+# results/{scenario}_{task_params}/ea_rl
+results_dir: null
+
+# 预留字段。当前占位分支不读取或写入训练 checkpoint。
+overwrite: False
+
+# 预留字段。当前占位分支统一输出提示后退出。
+render: False
+
+# 预留视频保存开关。
+save_render: False
+
+# 是否保留结果目录结构。当前会写入占位说明文件到 logs。
+collect_results: True
+
+# 预留字段，后续重构可复用。
+eval_interval: 1
+
+# 预留字段，后续重构可复用。
+checkpoint_interval: 10
+
+# 预留字段，后续重构可复用。
+save_replay: False
+
+# 预留字段，后续重构可复用。
+progress_interval: 1
+
+# 预留字段，后续重构可复用。
+candidate_progress: False

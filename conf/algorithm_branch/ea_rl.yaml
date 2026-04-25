@@ -1,0 +1,7 @@
+# @package _global_
+defaults:
+  # ea_rl 分支仍保留 Hydra 入口，但当前只连接到占位实现。
+  # 选择方式：python train.py task=vmas/transport algorithm_branch=ea_rl
+  - /experiment: ea_rl
+  - /algorithm/ea_rl: evo_td3
+  - _self_
